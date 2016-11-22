@@ -14,5 +14,5 @@
 
 #define VOLUME (NT*NX)
 
-#define MAX_CHANGES 4
+#define MAX_CHANGES 8
 

@@ -1,3 +1,14 @@
+/****************************************************************
+ * Simulate the thirring model using the fermion bag algorithm 
+ * (arXiv:0910.5736). The mass term is represented as a field of 
+ * monomers (occupied sites) and the four fermion term is  
+ * represented as dimers (occupied links). 
+ *
+ ****************************************************************/
+
+
+
+
 #include "Thirring.h"
 
 #define flip_exit_propability 0.2
@@ -53,7 +64,9 @@ static inline void link_on(int t, int x, int dir){
   if ( field[t][x] == 0 && field[t2][x2] == 0 ){
     field[t][x] = dir+2;
     field[t2][x2] = opp_dir(dir)+2;
+#ifdef DEBUG
     printf("Turned on link (%d,%d,%d) (%d,%d,%d)\n",t,x,dir,t2,x2,opp_dir(dir));
+#endif
   } else {
     printf("Link already occupied\n");
     exit(1);
@@ -65,7 +78,9 @@ static inline void monomer_on(int t, int x, int t2, int x2){
   if ( field[t][x] == 0 && field[t2][x2] == 0 ){
     field[t][x] = 1;
     field[t2][x2] = 1;
+#ifdef DEBUG
     printf("Turned on link (%d,%d) (%d,%d)\n",t,x,t2,x2);
+#endif
   } else {
     printf("Link already occupied\n");
     exit(1);
@@ -79,7 +94,9 @@ static inline void link_off(int t, int x, int dir){
   if ( field[t][x] != 0 && field[t2][x2] != 0 ){
     field[t][x] = 0;
     field[t2][x2] = 0;
+#ifdef DEBUG
     printf("Turned off link (%d,%d) (%d,%d)\n",t,x,t2,x2);
+#endif
   } else {
     printf("Link already off\n");
     exit(1);
@@ -153,13 +170,13 @@ void calc_Dinv( )
   // LU decompose
   LAPACK_dgetrf( &n, &n, Dinv, &n, ipiv, &info );
   if( info != 0 ) {
-    printf("sgetrf returned an error %d! \n", info);
+    printf("calc_Dinv: sgetrf returned an error %d! \n", info);
     exit(-1);
   }
 
   LAPACK_dgetri(&n, Dinv, &n, ipiv, work, &lwork, &info);
   if( info != 0 ) {
-    printf("sgetri returned an error %d! \n", info);
+    printf("calc_Dinv: sgetri returned an error %d! \n", info);
     exit(-1);
   }
 
@@ -178,7 +195,7 @@ void calc_Dinv( )
 double previous_accepted_det = 1;
 double previous_det = 1;
 double det_save = 1;
-void occupied_inverse(  )
+void update_background( )
 {
  /* The current configuration becomes the background */
  n_bc_monomers = n_monomers;
@@ -246,7 +263,6 @@ void occupied_inverse(  )
   if( info != 0 ) {
     fprintf(stderr, "sgetrf returned error %d (zero determinant has been accepted)! \n", info);
     fprintf(stderr, " Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
-    print_config();
     exit(-1);
   }
   
@@ -260,7 +276,7 @@ void occupied_inverse(  )
   double *work;
   work = malloc( lwork*sizeof(double) );
   if (NULL == work) {
-    fprintf(stderr, "failed to allocate work matrix in occupied_inverse (size n=%d) \n",n);
+    fprintf(stderr, "failed to allocate work matrix in update_background (size n=%d) \n",n);
     exit(-1);
   }
   
@@ -274,10 +290,11 @@ void occupied_inverse(  )
  }
 
  double diff =  fabs(det) - fabs(det_save);
+#ifdef DEBUG
  printf("EXACT det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
+#endif
  if(diff*diff/(det*det)>0.001){
    fprintf(stderr, " Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
-   print_config();
    exit(1);
  }
  det_save = det;
@@ -318,7 +335,9 @@ void update_linklists(){
       legalmonomers[n_legalmonomers] = nu*NX*NT + t*NX + x ;
       n_legalmonomers ++;
   }
+#ifdef DEBUG
   printf("update_linklists: n_links = %d, n_legalmonomers = %d, n_legalemptylinks = %d\n",n_links,n_legalmonomers,n_legalemptylinks);
+#endif
 }
 
 int n_legal_monomers_after_adding(int t1, int x1, int t2, int x2){
@@ -358,10 +377,9 @@ void new_link(int t, int x, int nu){
   n_added_even++; /* Already added to lists in det_added_link() */
   n_added_odd++;
   
-  printf("Added link at (%d,%d,%d) %g \n",t,x,nu,det_save);
   update_linklists();
   if( n_added_even == MAX_CHANGES || n_added_odd == MAX_CHANGES  ){
-    occupied_inverse();
+    update_background();
     n_removed_even=n_removed_odd=0;
     n_added_even=n_added_odd=0;
   }
@@ -375,10 +393,9 @@ void new_monomer(int t1, int x1, int t2, int x2){
   n_added_even++; /* Already added to lists in det_added_link() */
   n_added_odd++;
 
-  printf("Added monomer at (%d,%d (%d,%d) %g \n",t1,x1,t2,x2,det_save);
   update_linklists();
   if( n_added_even == MAX_CHANGES || n_added_odd == MAX_CHANGES  ){
-    occupied_inverse();
+    update_background();
     n_removed_even=n_removed_odd=0;
     n_added_even=n_added_odd=0;
   }
@@ -389,31 +406,39 @@ void removed_link(int t, int x, int nu){
   det_save = det_save*previous_det/previous_accepted_det;
   previous_accepted_det = previous_det;
 
-  int s;
+  int t2 = tdir(t,nu), x2=xdir(x,nu);
+  int s1 = (t*NX + x)/2, s2 = (t2*NX+x2)/2;
+  
   if( (t+x)%2 == 1 ) {
-    s = (tdir(t,nu)*NX + xdir(x,nu))/2;
-  } else {
-    s = (t*NX + x)/2;
-  }  
-
+    int s=s2; s2=s1; s1=s; 
+  }
+  
   /* Check for the site in added monomers */ 
   int new_site = 1;
-  for( int i=0; i<n_added_even; i++ ) if( added_evensites[i] == s ) {
-    /* Removing a link that was added in this update. Remove both from the list */
-    /* The removed link has been moved to the end of the list */
-    n_added_even--; n_added_odd--;
+  for( int i=0; i<n_added_even; i++ ) if( added_evensites[i] == s1 ) {
+    n_added_even--;
     new_site = 0;
   }
   if( new_site ){
     n_removed_even++; /* Already added to lists in det_added_link() */
-    n_removed_odd++;
   }
 
+  new_site = 1;
+  for( int i=0; i<n_added_odd; i++ ) if( added_oddsites[i] == s2 ) {
+    n_added_odd--;
+    new_site = 0;
+  }
+  if( new_site ){
+    n_removed_odd++; /* Already added to lists in det_added_link() */
+  }
+ 
+#ifdef DEBUG
   printf("Removed link at (%d,%d,%d) %g \n",t,x,nu,det_save);
   printf(" indexes %d %d %d %d \n",n_added_even,n_added_odd,n_removed_even,n_removed_odd);
+#endif
   update_linklists();
   if( n_removed_even == MAX_CHANGES || n_removed_odd == MAX_CHANGES ){
-    occupied_inverse();
+    update_background();
     n_removed_even=n_removed_odd=0;
     n_added_even=n_added_odd=0;
   }
@@ -427,7 +452,7 @@ void removed_monomer(int t1, int x1, int nu){
 
   if( (t1+x1)%2 == 1 ) { int t=t2, x=x2; t2=t1;x2=x1; t1=t;x1=x;}
 
-  printf("Removed monomer at (%d,%d,%d) %g \n",t1,x1,nu,det_save);
+
 
   /* Check for the site in added monomers */ 
   int s = (t1*NX + x1)/2;
@@ -450,9 +475,13 @@ void removed_monomer(int t1, int x1, int nu){
     n_removed_odd++; /* Already added to lists in det_added_link() */
   }
 
+#ifdef DEBUG
+  printf("Removed monomer at (%d,%d,%d) %g \n",t1,x1,nu,det_save);
+  printf(" indexes %d %d %d %d \n",n_added_even,n_added_odd,n_removed_even,n_removed_odd);
+#endif
   update_linklists();
   if(n_removed_even == MAX_CHANGES || n_removed_odd == MAX_CHANGES ){
-    occupied_inverse();
+    update_background();
     n_removed_even=n_removed_odd=0;
     n_added_even=n_added_odd=0;
   }
@@ -464,7 +493,9 @@ double extended_determinant( int me, int mo, int re, int ro ){
   int n = n_bc_monomers/2 + n_bc_links;
   int mr = me + ro;
 
+#ifdef DEBUG
   printf("extended_determinant, me %d mo %d re %d ro %d\n",me,mo,re,ro);
+#endif
 
   if(mr==0) return 1;
 
@@ -521,15 +552,6 @@ double extended_determinant( int me, int mo, int re, int ro ){
     MdAd[(re+a)*mr+(ro+b)] = Dinv[added_evensites[b]*VOLUME/2+added_oddsites[a]] - dAd;
   }
 
-  /*
-  for( int a=0; a<mr; a++){ for( int b=0; b<mr; b++)
-    { 
-      printf(" %15.4g %2d",MdAd[a*mr+b],a*mr+b);
-    }
-    printf("\n");
-  }
-  */
-
   /* determinant from LU */
   double det=1;
   int ipiv[mr], info;
@@ -553,7 +575,10 @@ double det_added_link(int t, int x, int t2, int x2){
 
   double det = extended_determinant(me,mo,n_removed_even,n_removed_odd);
   double detratio = det/previous_accepted_det;
+#ifdef DEBUG
+  printf("Adding at (%d,%d) and (%d,%d), values %d and %d\n",t,x,t2,x2,field[t][x],field[t2][x2]);
   printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
+#endif
   previous_det = det;
   return( detratio );
 }
@@ -576,7 +601,6 @@ double det_removed_link(int t, int x, int t2, int x2 ){
     added_evensites[n_added_even-1] = i;
     me--;
     new_site = 0;
-    //printf("removing a new even site %d\n",i);
     break;
   } 
   if( new_site ){
@@ -590,7 +614,6 @@ double det_removed_link(int t, int x, int t2, int x2 ){
     added_oddsites[n_added_odd-1] = j;
     mo--;
     new_site = 0;
-    //printf("removing a new odd site %d\n",j);
     break;
   } 
   if( new_site ){
@@ -602,7 +625,10 @@ double det_removed_link(int t, int x, int t2, int x2 ){
   double det = extended_determinant(me,mo,re,ro);
   //double old_det = extended_determinant(n_added_even,n_added_odd,n_removed_even,n_removed_odd);
   double detratio = det/previous_accepted_det;
+#ifdef DEBUG
+  printf("Removing at (%d,%d) and (%d,%d), values %d and %d\n",t,x,t2,x2,field[t][x],field[t2][x2]);
   printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
+#endif
   previous_det = det;
 
   return( detratio );
@@ -658,7 +684,6 @@ int add_link()
     int s = legalemptylinks[ (int) (mersenne()*n_legalemptylinks) ];
     int t, x, nu;
     x = s % NX; t = (s/NX)%NT; nu = s/(NX*NT);
-    printf("Adding link index %d, (%d,%d,%d)\n",s,t,x,nu);
     int t2,x2;
     t2 = tdir(t,nu); x2 = xdir(x,nu);
 
@@ -693,7 +718,6 @@ int remove_link()
       int s = legalmonomers[ (int)(mersenne()*n_legalmonomers) ];
       int t, x, nu;
       x = s % NX; t = (s/NX)%NT; nu = s/(NX*NT);
-      printf("Removing at (%d,%d,%d) (index %d) (legal monomers %d) \n",t,x,nu,s,n_legalmonomers);
       int t2,x2;
       t2 = tdir(t,nu); x2 = xdir(x,nu);
 
@@ -730,12 +754,11 @@ int update()
 {
   int changes=0;
   changes+=remove_link();
-  check_det( );
   changes+=add_link();
-  check_det( );
   changes+=move_monomer();
+#ifdef DEBUG
   check_det( );
-
+#endif
   return changes;
 }
 
@@ -798,15 +821,17 @@ void print_config()
 static int measurement = 0;
 void measure()
 {
-  occupied_inverse();
+  update_background();
   n_added_even = n_added_odd = 0;
   n_removed_even = n_removed_odd = 0;
   
   measure_propagator();
   measure_susceptibility();
 
+#ifdef DEBUG
   print_config();
-  
+#endif  
+
   measurement++;
 }
 
@@ -964,7 +989,7 @@ int main(int argc, char* argv[])
 
 
 
-
+#ifdef DEBUG
 /* Check the determinant
  */
 void check_det(  )
@@ -1037,7 +1062,6 @@ void check_det(  )
   if( info != 0 ) {
     fprintf(stderr, "sgetrf returned error %d (zero determinant has been accepted)! \n", info);
     fprintf(stderr, " Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
-    print_config();
     exit(-1);
   }
   
@@ -1051,12 +1075,11 @@ void check_det(  )
  printf("EXACT det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
  if(diff*diff/(det*det)>0.001){
    fprintf(stderr, " Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
-   print_config();
    exit(1);
  }
 }
 
-
+#endif
 
 
 
