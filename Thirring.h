@@ -7,12 +7,12 @@
 #include <sys/time.h>
 
 /* Lattice size, adjust */
-#define NT 16
-#define NX 16
+#define NT 32
+#define NX 32
 #define ND 2
 #define NDIRS (2*ND)
 
 #define VOLUME (NT*NX)
 
-#define MAX_CHANGES 8
+#define MAX_CHANGES 40
 
