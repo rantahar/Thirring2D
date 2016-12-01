@@ -7,8 +7,8 @@ DEPS=Makefile Thirring.h
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-Thirring: Thirring.o mersenne_inline.o $(DEPS)
-	$(CC) -o Thirring Thirring.o mersenne_inline.o $(CFLAGS)
+Thirring: Thirring.o mersenne_inline.o vec_ops.o $(DEPS)
+	$(CC) -o Thirring Thirring.o mersenne_inline.o vec_ops.o $(CFLAGS)
 
 clean:
 	rm -f *.o  

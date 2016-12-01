@@ -11,15 +11,15 @@
 
 #include "Thirring.h"
 
-#define flip_exit_propability 0.2
-
 /* storage */
 int    eta[NT][NX][ND];   //Staggered eta matrix
 double *Dinv;             //Storage for even to odd propagator
 int    *evenlist, *oddlist;  //Lists of occupied sites
+int    *unoccupied_evenlist, *unoccupied_oddlist;  //Lists of occupied sites
 double m;
 double U;
 double mu;
+
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -41,14 +41,14 @@ int tup[NT],xup[NX],tdn[NT],xdn[NX];
 
 /* Functions for fetching neighboring coordinates */
 static inline int tdir(int t, int dir){
-  if( dir == 0 ) return tup[t];
-  else if ( dir == 2 ) return tdn[t];
+  if( dir == TUP ) return tup[t];
+  else if ( dir == TDN ) return tdn[t];
   else return(t);
 }
 
 static inline int xdir(int x, int dir){
-  if( dir == 1 ) return xup[x];
-  else if ( dir == 3 ) return xdn[x];
+  if( dir == XUP ) return xup[x];
+  else if ( dir == XDN ) return xdn[x];
   else return(x);
 }
 
@@ -76,8 +76,8 @@ static inline void link_on(int t, int x, int dir){
 /* Turn a monomer on at a link */
 static inline void monomer_on(int t, int x, int t2, int x2){
   if ( field[t][x] == 0 && field[t2][x2] == 0 ){
-    field[t][x] = 1;
-    field[t2][x2] = 1;
+    field[t][x] = MONOMER;
+    field[t2][x2] = MONOMER;
 #ifdef DEBUG
     printf("Turned on link (%d,%d) (%d,%d)\n",t,x,t2,x2);
 #endif
@@ -121,11 +121,11 @@ double fM_index( int t1, int x1, int t2, int x2 )
   if(t1==t2 ){ 
     if( x2 == xup[x1] || x2 == xdn[x1] ) {
 #if NX==2 
-      if (x2>x1) { return eta[t1][x1][1] ; }
-      else { return -eta[t1][x1][1] ; }
+      if (x2>x1) { return -eta[t1][x1][1] ; }
+      else { return eta[t1][x1][1] ; }
 #else
-      if (x2>x1) { return 0.5*eta[t1][x1][1] ; }
-      else { return -0.5*eta[t1][x1][1] ; }
+      if (x2>x1) { return -0.5*eta[t1][x1][1] ; }
+      else { return 0.5*eta[t1][x1][1] ; }
 #endif
     }
     else return( 0.0 );
@@ -133,17 +133,16 @@ double fM_index( int t1, int x1, int t2, int x2 )
   else if ( x1==x2  ) {
     if( t2 == tup[t1] || t2 == tdn[t1] ) {
 #if NT==2
-      if (t2>t1) { return exp(mu)*eta[t1][x1][0] ; }
-      else { return -exp(mu)*eta[t1][x1][0] ; }
+      if (t2>t1) { return -exp(mu)*eta[t1][x1][0] ; }
+      else { return exp(mu)*eta[t1][x1][0] ; }
 #else
-      if (t2>t1) { return exp(mu)*eta[t1][x1][0] ; }
-      else { return -exp(mu)*eta[t1][x1][0] ; }
+      if (t2>t1) { return -0.5*exp(mu)*eta[t1][x1][0] ; }
+      else { return 0.5*exp(mu)*eta[t1][x1][0] ; }
 #endif
     }
     else return( 0.0 );
   } else return( 0.0 );
 }
-
 
 
 /* Calculate the propagator matrix
@@ -159,12 +158,10 @@ void calc_Dinv( )
   struct timeval start, end;
   gettimeofday(&start,NULL);
 
-  work = malloc( lwork*sizeof(double) );
-
-
   /* Construct the full Volume to Volume Dirac matrix
    * Odd to even here, the inverse will be even to odd
    */
+  work = malloc( lwork*sizeof(double) );
   for (int t1=0; t1<NT; t1++) for (int x1=0; x1<NX; x1++) if((t1+x1)%2==0) {
     int i1 = (NX*t1 + x1)/2;
     for (int t2=0; t2<NT; t2++) for (int x2=0; x2<NX; x2++) if((t2+x2)%2==1) {
@@ -173,27 +170,35 @@ void calc_Dinv( )
     }
   }
 
+
   // LU decompose
+
   LAPACK_dgetrf( &n, &n, Dinv, &n, ipiv, &info );
   if( info != 0 ) {
     printf("calc_Dinv: sgetrf returned an error %d! \n", info);
     exit(-1);
   }
-
   LAPACK_dgetri(&n, Dinv, &n, ipiv, work, &lwork, &info);
   if( info != 0 ) {
     printf("calc_Dinv: sgetri returned an error %d! \n", info);
     exit(-1);
   }
-
+  
   free(work);
 
   gettimeofday(&end,NULL);
   int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
+
   printf("Inverted fermion matrix in %.3g seconds\n", 1e-6*diff);
 }
 
 
+/* Matrices needed for the fluctuation matrix */
+double GC[VOLUME/2][VOLUME/2];
+double B[VOLUME/2][VOLUME/2],C[VOLUME/2][VOLUME/2];
+double BAP[VOLUME/2][VOLUME/2];
+double PAC[VOLUME/2][VOLUME/2];
+double BGC[VOLUME/2][VOLUME/2];
 
 /* Invert the matrix of propagators between occupied sites
  * Assing the current configuration as the background
@@ -209,28 +214,37 @@ void update_background( )
 
  double det=1; 
  int n = n_monomers/2 + n_links;
+ int m = VOLUME/2 - n;
 
  /*If no occupied sites, determinant of rank 0 is 1 */
  if( n > 0 ){
   int ipiv[n];
   int info;
   
-  /* Find occupied sites, construct lists */
-  int i=0,j=0;
+  /* Find occupied and unoccupied sites, construct lists */
+  int i=0,j=0,a=0,b=0;
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++){
     if(field[t][x]>0) {
       if((t+x)%2==0) {
-        evenlist[i] = (NX/2)*t + x/2;
+        evenlist[i] = (NX*t + x)/2;
         i++;
       } else {
-        oddlist[j] = (NX/2)*t + x/2;
+        oddlist[j] = (NX*t + x)/2;
         j++;
+      }
+    } else {
+      if((t+x)%2==0) {
+        unoccupied_evenlist[a] = (NX*t + x)/2;
+        a++;
+      } else {
+        unoccupied_oddlist[b] = (NX*t + x)/2;
+        b++;
       }
     }
   }
   if(i!=j || j!=n){
     printf("Number on occupied sites doesn't match, i=%d, j=%d, n=%d, n_links=%d, n_monomers=%d\n",i,j,n,n_links,n_monomers);
-    print_config();
+    //print_config();
     exit(1);
   }
 
@@ -283,13 +297,44 @@ void update_background( )
  }
  det_save = det;
  previous_accepted_det = previous_det = 1;
+
+
+  /* Construct the entries of the fluctuation matrix */
+  double A[n*n];
+  for( int a=0; a<VOLUME/2; a++ ) for( int l=0; l<n; l++)
+    B[a][l] = Dinv[a*VOLUME/2+oddlist[l]];
+
+  for( int a=0; a<n; a++) for( int l=0; l<n; l++)
+    A[a*n+l] = Ginv[l*n+a];
+  for( int a=0; a<n; a++) for( int b=0; b<VOLUME/2; b++)
+  { 
+    BAP[a][b] = 0;
+    for( int l=0; l<n; l++) BAP[a][b] += B[b][l]*A[a*n+l];
+  }
+
+  for( int a=0; a<VOLUME/2; a++ ) for( int k=0; k<n; k++)
+    C[a][k] = Dinv[evenlist[k]*VOLUME/2+a];
+  for( int b=0; b<n; b++) for( int k=0; k<n; k++)
+    A[b*n+k] = Ginv[b*n+k];
+  for( int a=0; a<VOLUME/2; a++) for( int b=0; b<n; b++)
+  { 
+    PAC[a][b] = 0;
+    for( int k=0; k<n; k++) PAC[a][b] -= A[b*n+k]*C[a][k];
+  }
+
+
+  for( int a=0; a<VOLUME/2; a++ ) for( int l=0; l<n; l++){
+    GC[a][l] = 0;
+      for( int k=0; k<n; k++) GC[a][l] += Ginv[l*n+k]*C[a][k];
+  }
+
+  for( int b=0; b<VOLUME/2; b++) for( int a=0; a<VOLUME/2; a++){
+    BGC[b][a] = 0;
+    for( int l=0; l<n; l++)
+      BGC[b][a] += B[b][l]*GC[a][l];
+    BGC[b][a] = Dinv[b*VOLUME/2+a] - BGC[b][a];
+  }
 }
-
-
-
-
-
-
 
 
 /* Update the links and monomers
@@ -303,8 +348,8 @@ int n_legalmonomers=0;
 void update_linklists(){
   n_links=0; n_legalemptylinks=0; n_legalmonomers=0;
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++)
-    if( field[t][x] > 1 && field[t][x] < 4  ){    //  Count each link once
-      int nu = field[t][x]-2;
+    if( field[t][x] >= LINK_TUP && field[t][x] < LINK_TUP+ND  ){    //  Count each link once
+      int nu = field[t][x] - LINK_TUP;
       links[n_links] = nu*NX*NT + t*NX + x ;
       n_links ++;
   }
@@ -316,7 +361,7 @@ void update_linklists(){
   }
 
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int nu=0; nu<ND; nu++)
-    if( (field[t][x] == 1) && (field[tdir(t,nu)][xdir(x,nu)] == 1) ){
+    if( (field[t][x] == MONOMER) && (field[tdir(t,nu)][xdir(x,nu)] == MONOMER) ){
       legalmonomers[n_legalmonomers] = nu*NX*NT + t*NX + x ;
       n_legalmonomers ++;
   }
@@ -327,10 +372,10 @@ void update_linklists(){
 
 int n_legal_monomers_after_adding(int t1, int x1, int t2, int x2){
   int n_new=1;
-  for (int nu=0; nu<2*ND; nu++){
-    if( field[tdir(t1,nu)][xdir(x1,nu)] == 1 )
+  for (int nu=0; nu<NDIRS; nu++){
+    if( field[tdir(t1,nu)][xdir(x1,nu)] == MONOMER )
       n_new ++;
-    if( field[tdir(t2,nu)][xdir(x2,nu)] == 1 )
+    if( field[tdir(t2,nu)][xdir(x2,nu)] == MONOMER )
       n_new ++;
   }
   return n_legalmonomers+n_new;
@@ -338,12 +383,20 @@ int n_legal_monomers_after_adding(int t1, int x1, int t2, int x2){
 
 int n_legal_links_after_removing(int t1, int x1, int t2, int x2){
   int n_new=1;
-  for (int nu=0; nu<2*ND; nu++){
+  for (int nu=0; nu<NDIRS; nu++)
+  {
     if( field[tdir(t1,nu)][xdir(x1,nu)] == 0 )
       n_new ++;
     if( field[tdir(t2,nu)][xdir(x2,nu)] == 0 )
       n_new ++;
   }
+#if NT==2
+  if(t2==tdir(t1,0)) n_new += 1;
+#endif
+#if NX==2
+  if(x2==xdir(x1,1)) n_new += 1;
+#endif
+  //printf("nl %d nn %d\n",n_legalemptylinks,n_new);
   return n_legalemptylinks+n_new;
 }
 
@@ -359,8 +412,31 @@ void new_link(int t, int x, int nu){
   det_save = det_save*previous_det/previous_accepted_det;
   previous_accepted_det = previous_det;
 
-  n_added_even++; /* Already added to lists in det_added_link() */
-  n_added_odd++;
+  int t2 = tdir(t,nu), x2=xdir(x,nu);
+  int s1 = (t*NX + x)/2, s2 = (t2*NX+x2)/2;
+  
+  if( (t+x)%2 == 1 ) {
+    int s=s2; s2=s1; s1=s; 
+  }
+  
+  /* Check for the site in added monomers */ 
+  int new_site = 1;
+  for( int k=0; k<n_removed_even; k++ ) if( evenlist[removed_evenlist[k]] == s1 ) {
+    n_removed_even--;
+    new_site = 0;
+  }
+  if( new_site ){
+    n_added_even++; /* Already added to lists in det_added_link() */
+  }
+
+  new_site = 1;
+  for( int k=0; k<n_removed_odd; k++ ) if( oddlist[removed_oddlist[k]] == s2 ) {
+    n_removed_odd--;
+    new_site = 0;
+  }
+  if( new_site ){
+    n_added_odd++; /* Already added to lists in det_added_link() */
+  }
   
   update_linklists();
   if( n_added_even == MAX_CHANGES || n_added_odd == MAX_CHANGES  ){
@@ -375,8 +451,30 @@ void new_monomer(int t1, int x1, int t2, int x2){
   det_save = det_save*previous_det/previous_accepted_det;
   previous_accepted_det = previous_det;
 
-  n_added_even++; /* Already added to lists in det_added_link() */
-  n_added_odd++;
+  int s1 = (t1*NX + x1)/2, s2 = (t2*NX+x2)/2;
+  
+  if( (t1+x1)%2 == 1 ) {
+    int s=s2; s2=s1; s1=s; 
+  }
+  
+  /* Check for the site in added monomers */ 
+  int new_site = 1;
+  for( int k=0; k<n_removed_even; k++ ) if( evenlist[removed_evenlist[k]] == s1 ) {
+    n_removed_even--;
+    new_site = 0;
+  }
+  if( new_site ){
+    n_added_even++; /* Already added to lists in det_added_link() */
+  }
+
+  new_site = 1;
+  for( int k=0; k<n_removed_odd; k++ ) if( oddlist[removed_oddlist[k]] == s2 ) {
+    n_removed_odd--;
+    new_site = 0;
+  }
+  if( new_site ){
+    n_added_odd++; /* Already added to lists in det_added_link() */
+  }
 
   update_linklists();
   if( n_added_even == MAX_CHANGES || n_added_odd == MAX_CHANGES  ){
@@ -437,7 +535,6 @@ void removed_monomer(int t1, int x1, int nu){
 
   if( (t1+x1)%2 == 1 ) { int t=t2, x=x2; t2=t1;x2=x1; t1=t;x1=x;}
 
-
   /* Check for the site in added monomers */ 
   int s = (t1*NX + x1)/2;
   int new_site = 1;
@@ -472,11 +569,9 @@ void removed_monomer(int t1, int x1, int nu){
 }
 
 
-/* Determinants after adding or removing links */
-double GC[MAX_CHANGES+2][VOLUME/2];
-double B[MAX_CHANGES+2][VOLUME/2],C[MAX_CHANGES+2][VOLUME/2];
-double BGC[MAX_CHANGES+2][MAX_CHANGES+2];
 
+
+/* Determinants after adding or removing links */
 double extended_determinant( int me, int mo, int re, int ro ){
   int n = n_bc_monomers/2 + n_bc_links;
   int mr = me + ro;
@@ -486,43 +581,16 @@ double extended_determinant( int me, int mo, int re, int ro ){
   printf("extended_determinant, n_added_even %d n_added_odd %d n_removed_even %d n_removed_odd %d, n %d\n",n_added_even,n_added_odd,n_removed_even,n_removed_odd,n);
 #endif
 
-  double A[(MAX_CHANGES+1)*n];
-  for( int b=0; b<ro; b++) {
-    for( int k=0; k<n; k++) A[b*n+k] = Ginv[removed_oddlist[b]*n+k];
-  }
-
   if(mr==0) return 1;
-
   double F[mr*mr];
-
   for( int b=0; b<ro; b++) for( int a=0; a<re; a++)
     F[a*mr+b] = Ginv[removed_oddlist[b]*n+removed_evenlist[a]];
-
   for( int a=0; a<mo; a++) for( int b=0; b<ro; b++)
-  { 
-    double PAC = 0;
-    for( int k=0; k<n; k++)
-      PAC += A[b*n+k]*C[a][k];
-    F[(re+a)*mr+b] = -PAC;
-  }
-
-  for( int a=0; a<re; a++) {
-    int i = removed_evenlist[a];
-    for( int l=0; l<n; l++)  A[a*n+l] = Ginv[l*n+i];
-  }
+    F[(re+a)*mr+b] = PAC[added_oddsites[a]][removed_oddlist[b]];
   for( int a=0; a<re; a++) for( int b=0; b<me; b++)
-  { 
-    double BAP = 0;
-    
-    for( int l=0; l<n; l++)
-      BAP += B[b][l]*A[a*n+l];
-    F[a*mr+(ro+b)] = BAP;
-  }
-
+    F[a*mr+(ro+b)] = BAP[removed_evenlist[a]][added_evensites[b]];
   for( int b=0; b<me; b++) for( int a=0; a<mo; a++)
-  {
-    F[(re+a)*mr+(ro+b)] = Dinv[added_evensites[b]*VOLUME/2+added_oddsites[a]] - BGC[b][a];
-  }
+    F[(re+a)*mr+(ro+b)] = BGC[added_evensites[b]][added_oddsites[a]];
 
 
   /* determinant from LU */
@@ -535,54 +603,121 @@ double extended_determinant( int me, int mo, int re, int ro ){
 }
 
 
+
+
+
+int odd_site_in_removed_list( int j, int sites ){
+  int new_odd_site = 1;
+  for( int k=0; k<sites; k++ ) if( oddlist[removed_oddlist[k]] == j ) {
+    int tmp = removed_oddlist[k];
+    for( int l=k; l<sites-1; l++) removed_oddlist[l] = removed_oddlist[l+1];
+    removed_oddlist[sites-1] = tmp;
+    new_odd_site = 0;
+    break;
+  } 
+  if( new_odd_site ) added_oddsites[n_added_odd] = j;
+  return new_odd_site;
+}
+
+int even_site_in_removed_list( int j, int sites ){
+  int new_even_site = 1;
+  for( int k=0; k<sites; k++ ) if( evenlist[removed_evenlist[k]] == j ) {
+    int tmp = removed_evenlist[k];
+    for( int l=k; l<sites-1; l++) removed_evenlist[l] = removed_evenlist[l+1];
+    removed_evenlist[sites-1] = tmp;
+    new_even_site = 0;
+    break;
+  } 
+  if( new_even_site ) added_evensites[n_added_even] = j;
+  return new_even_site;
+}
+
+
 double det_added_link(int t, int x, int t2, int x2){
   int n = n_bc_monomers/2 + n_bc_links;
-  int me = n_added_even + 1;
-  int mo = n_added_odd + 1;
+  int me=n_added_even, mo=n_added_odd, re=n_removed_even, ro=n_removed_odd;
 
   /* Make sure that (t,x) is even and (t2,x2) is odd */
   if( (t+x)%2 == 1 ) { int t1=t2, x1=x2; t2=t;x2=x; t=t1;x=x1; }
 
-  /* The new link is added to the last position, n_added  */
-  added_evensites[n_added_even] = (NX*t + x)/2;
-  added_oddsites[n_added_odd] = (NX*t2 + x2)/2;
-
-  /* Block matrices used in constructing the fluctuation matrix F */
-  for( int l=0; l<n; l++)
-    B[n_added_even][l] = Dinv[added_evensites[n_added_even]*VOLUME/2+oddlist[l]];
-  for( int k=0; k<n; k++)
-    C[n_added_odd][k] = Dinv[evenlist[k]*VOLUME/2+added_oddsites[n_added_odd]];
-  for( int l=0; l<n; l++){
-    GC[n_added_odd][l] = 0;
-      for( int k=0; k<n; k++) GC[n_added_odd][l] += Ginv[l*n+k]*C[n_added_odd][k];
+  int new_even_site = 1;// even_site_in_removed_list((NX*t + x)/2, n_removed_even);
+  for( int k=0; k<n_removed_even; k++ ) if( evenlist[removed_evenlist[k]] == (NX*t + x)/2 ) {
+    re--;
+    int tmp = removed_evenlist[k];
+    for( int l=k; l<n_removed_even-1; l++) removed_evenlist[l] = removed_evenlist[l+1];
+    removed_evenlist[n_removed_even-1] = tmp;
+    new_even_site = 0;
+    break;
+  } 
+  if( new_even_site ) {
+    me++;
+    added_evensites[n_added_even] = (NX*t + x)/2 ;
   }
 
-  for( int b=0; b<me; b++)
-  {
-    BGC[b][n_added_odd] = 0;
-    for( int l=0; l<n; l++) 
-      BGC[b][n_added_odd] += B[b][l]*GC[n_added_odd][l];
+  int new_odd_site = 1;
+  for( int k=0; k<n_removed_odd; k++ ) if( oddlist[removed_oddlist[k]] == (NX*t2 + x2)/2 ) {
+    ro--;
+    int tmp = removed_oddlist[k];
+    for( int l=k; l<n_removed_odd-1; l++) removed_oddlist[l] = removed_oddlist[l+1];
+    removed_oddlist[n_removed_odd-1] = tmp;
+    new_odd_site = 0;
+    break;
+  } 
+  if( new_odd_site ){
+    mo++;
+    added_oddsites[n_added_odd] = (NX*t2 + x2)/2;
   }
-  for( int a=0; a<mo; a++)
-  {
-    BGC[n_added_even][a] = 0;
-    for( int l=0; l<n; l++) 
-      BGC[n_added_even][a] += B[n_added_even][l]*GC[a][l];
-  }
-  BGC[n_added_even][n_added_odd] = 0;
-  for( int l=0; l<n; l++)
-    BGC[n_added_even][n_added_odd] += B[n_added_even][l]*GC[n_added_odd][l]; 
 
-  double det = extended_determinant(me,mo,n_removed_even,n_removed_odd);
+  double det = extended_determinant(me,mo,re,ro);
   double detratio = det/previous_accepted_det;
 #ifdef DEBUG
-  printf("Adding at (%d,%d) and (%d,%d), values %d and %d\n",t,x,t2,x2,field[t][x],field[t2][x2]);
+  printf("Adding at (%d,%d) (%d) and (%d,%d) (%d)\n",t,x,(t*NX+t)/2,t2,x2,(t2*NX+x2)/2);
   printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
 #endif
   previous_det = det;
+
+
   return( detratio );
 }
 
+
+
+
+
+
+
+int odd_site_in_list( int j, int sites ){
+  int n = n_bc_monomers/2 + n_bc_links;
+  int new_odd_site = 1;
+  for( int k=0; k<sites; k++ ) if( added_oddsites[k] == j ) {
+    for( int l=k; l<sites-1; l++) added_oddsites[l] = added_oddsites[l+1];
+    added_oddsites[sites-1] = j;
+    new_odd_site = 0;
+    break;
+  } 
+  if( new_odd_site ){
+    for( int k=0; k<n; k++){
+      printf("%d ",oddlist[k]);
+      if( oddlist[k] == j )
+        removed_oddlist[n_removed_odd] = k;
+    }
+  }
+  return new_odd_site;
+}
+
+int even_site_in_list( int i, int sites ){
+  int n = n_bc_monomers/2 + n_bc_links;
+  int new_even_site = 1;
+  for( int k=0; k<sites; k++ ) if( added_evensites[k] == i ) {
+    for( int l=k; l<sites-1; l++) added_evensites[l] = added_evensites[l+1];
+    added_evensites[sites-1] = i;
+    new_even_site = 0;
+    break;
+  } 
+  if( new_even_site ) for( int k=0; k<n; k++) if( evenlist[k] == i )
+      removed_evenlist[n_removed_even] = k;
+  return( new_even_site );
+}
 
 double det_removed_link(int t, int x, int t2, int x2 ){
   int n = n_bc_monomers/2 + n_bc_links;
@@ -590,71 +725,38 @@ double det_removed_link(int t, int x, int t2, int x2 ){
   //Make sure that (t,x) is even and (t2,x2) is odd
   if( (t+x)%2 == 1 ) { int t1=t2, x1=x2; t2=t;x2=x; t=t1;x=x1; }
 
-  int i = (NX*t+x)/2;
-  int j = (NX*t2+x2)/2;
-
   // Check for the removed links in added, if found, reorder, otherwise ad to removed list
   int me=n_added_even, mo=n_added_odd, re=n_removed_even, ro=n_removed_odd;
-  
-  int new_odd_site = 1;
-  for( int k=0; k<n_added_odd; k++ ) if( added_oddsites[k] == j ) {
-    for( int l=k; l<n_added_odd-1; l++) added_oddsites[l] = added_oddsites[l+1];
-    added_oddsites[n_added_odd-1] = j;
-    mo--;
-    new_odd_site = 0;
 
-    //Reorder block matrices C and GC and BGC accordingly
-    for( int l=0; l<n; l++) {
-     double tmp = C[k][l];
-     for( int a=k; a<n_added_odd-1; a++)  C[a][l] = C[a+1][l];
-     C[n_added_odd-1][l] = tmp;
-     
-     tmp = GC[k][l];
-     for( int a=k; a<n_added_odd-1; a++)  GC[a][l] = GC[a+1][l];
-     GC[n_added_odd-1][l] = tmp;
-    }
-    for( int l=0; l<n_added_even; l++) {
-     double tmp = BGC[l][k];
-     for( int a=k; a<n_added_odd-1; a++)  BGC[l][a] = BGC[l][a+1];
-     BGC[l][n_added_odd-1] = tmp;
-    }
-
-    break;
-  } 
-  if( new_odd_site ){
-    for( int k=0; k<n; k++) if( oddlist[k] == j )
-      removed_oddlist[n_removed_odd] = k;
-    ro++;
-  }
-
-  int new_even_site = 1;
-  for( int k=0; k<n_added_even; k++ ) if( added_evensites[k] == i ) {
-    for( int l=k; l<n_added_even-1; l++) added_evensites[l] = added_evensites[l+1];
-    added_evensites[n_added_even-1] = i;
+  int new_even_site=1;
+  for( int k=0; k<n_added_even; k++ ) if( added_evensites[k] == (NX*t+x)/2 ) {
     me--;
+    for( int l=k; l<n_added_even-1; l++) added_evensites[l] = added_evensites[l+1];
+    added_evensites[n_added_even-1] = (NX*t+x)/2;
     new_even_site = 0;
-
-    //Reorder block matrices B and BGC accordingly
-    for( int l=0; l<n; l++) {
-     double tmp = B[k][l];
-     for( int a=k; a<n_added_even-1; a++)  B[a][l] = B[a+1][l];
-     B[n_added_even-1][l] = tmp;
-    }
-    for( int l=0; l<n_added_odd; l++) {
-     double tmp = BGC[k][l];
-     for( int a=k; a<n_added_even-1; a++)  BGC[a][l] = BGC[a+1][l];
-     BGC[n_added_even-1][l] = tmp;
-    }
     break;
   } 
   if( new_even_site ){
-    for( int k=0; k<n; k++) if( evenlist[k] == i )
-      removed_evenlist[n_removed_even] = k;
     re++;
+    for( int k=0; k<n; k++) if( evenlist[k] == (NX*t+x)/2 )
+      removed_evenlist[n_removed_even] = k;
+  }
+
+  int new_odd_site=1;
+  for( int k=0; k<n_added_odd; k++ ) if( added_oddsites[k] == (NX*t2+x2)/2 ) {
+    mo--;
+    for( int l=k; l<n_added_odd-1; l++) added_oddsites[l] = added_oddsites[l+1];
+    added_oddsites[n_added_odd-1] = (NX*t2+x2)/2;
+    new_odd_site = 0;
+    break;
+  } 
+  if( new_odd_site ){
+    ro++;
+    for( int k=0; k<n; k++) if( oddlist[k] == (NX*t2+x2)/2 )
+      removed_oddlist[n_removed_odd] = k;
   }
 
   double det = extended_determinant(me,mo,re,ro);
-  //double old_det = extended_determinant(n_added_even,n_added_odd,n_removed_even,n_removed_odd);
   double detratio = det/previous_accepted_det;
 #ifdef DEBUG
   printf("Removing at (%d,%d) and (%d,%d), values %d and %d\n",t,x,t2,x2,field[t][x],field[t2][x2]);
@@ -667,6 +769,104 @@ double det_removed_link(int t, int x, int t2, int x2 ){
 
 
 
+
+double det_moved_monomer(int t, int x, int t2, int x2){
+  int n = n_bc_monomers/2 + n_bc_links;
+  double detratio;
+
+  /* Make sure that (t,x) is even and (t2,x2) is odd */
+  if( (t+x)%2 != (t2+x2)%2) { 
+    printf("Attempting to move to opposite parity\n");
+    exit(1);
+  }
+  if( (t+x)%2 == 0 ) {
+
+    int me = n_added_even, re = n_removed_even;
+
+    /* Remove if found in list, otherwise add a to list of removed */
+    int new_even_site = 1;
+    for( int k=0; k<n_removed_even; k++ ) if( evenlist[removed_evenlist[k]] == (NX*t2 + x2)/2 ) {
+      int tmp = removed_evenlist[k];
+      for( int l=k; l<n_removed_even-1; l++) removed_evenlist[l] = removed_evenlist[l+1];
+      removed_evenlist[n_removed_even-1] = tmp;
+      new_even_site = 0;
+      re--;
+      break;
+    } 
+    if( new_even_site ) {
+      me++;
+      added_evensites[n_added_even] = (NX*t2 + x2)/2 ;
+    }
+
+    new_even_site=1;
+    for( int k=0; k<me; k++ ) if( added_evensites[k] == (NX*t+x)/2 ) {
+      for( int l=k; l<me-1; l++) added_evensites[l] = added_evensites[l+1];
+      added_evensites[me-1] = (NX*t+x)/2;
+      new_even_site = 0;
+      me--;
+      break;
+    } 
+    if( new_even_site ){
+      for( int k=0; k<n; k++) if( evenlist[k] == (NX*t+x)/2 )
+        removed_evenlist[re] = k;
+      re++;
+    }
+
+    double det = extended_determinant(me,n_added_odd,re,n_removed_odd);
+    detratio = det/previous_accepted_det;
+#ifdef DEBUG
+    printf("Moving (%d,%d) (%d) to (%d,%d) (%d)\n",t,x,(NX*t+x)/2,t2,x2,(NX*t2+x2)/2);
+    printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
+#endif
+    previous_det = det;
+    
+  } else {
+
+    int mo = n_added_odd, ro = n_removed_odd;
+
+    int new_odd_site = 1;
+    for( int k=0; k<n_removed_odd; k++ ) if( oddlist[removed_oddlist[k]] == (NX*t2 + x2)/2 ) {
+      int tmp = removed_oddlist[k];
+      for( int l=k; l<n_removed_odd-1; l++) removed_oddlist[l] = removed_oddlist[l+1];
+      removed_oddlist[n_removed_odd-1] = tmp;
+      new_odd_site = 0;
+      ro--;
+      break;
+    } 
+    if( new_odd_site ) {
+      mo++;
+      added_oddsites[n_added_odd] = (NX*t2 + x2)/2 ;
+    }
+
+    new_odd_site=1;
+    for( int k=0; k<mo; k++ ) if( added_oddsites[k] == (NX*t+x)/2 ) {
+      for( int l=k; l<mo-1; l++) added_oddsites[l] = added_oddsites[l+1];
+      added_oddsites[mo-1] = (NX*t+x)/2;
+      new_odd_site = 0;
+      mo--;
+      break;
+    } 
+    if( new_odd_site ){
+      for( int k=0; k<n; k++) if( oddlist[k] == (NX*t+x)/2 )
+        removed_oddlist[ro] = k;
+      ro++;
+    }
+
+
+    double det = extended_determinant(n_added_even,mo,n_removed_even,ro);
+    detratio = det/previous_accepted_det;
+#ifdef DEBUG
+    printf("Moving (%d,%d) (%d) to (%d,%d) (%d)\n",t,x,(NX*t+x)/2,t2,x2,(NX*t2+x2)/2);
+    printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
+#endif
+    previous_det = det;
+  }
+  return( detratio );
+}
+
+
+
+
 /* Move monomer along a set of links  */
 int move_monomer(){
   int success = 0;
@@ -675,7 +875,7 @@ int move_monomer(){
     /* Pick monomer  */
     int i=0,t,x,m = mersenne()*n_monomers + 1 ;
     for (t=0; i<m; t++) for (x=0; x<NX && i<m ; x++) {
-      if( field[t][x] == 1 ) i++;
+      if( field[t][x] == MONOMER ) i++;
     }
     t--;x--;
 
@@ -685,13 +885,13 @@ int move_monomer(){
       int t2, x2, linkdir;
       t2 = tdir(t,nu); x2=xdir(x,nu);
 
-      if( field[t2][x2] > 1 ) {
-        linkdir = field[t2][x2] - 2;
+      if( field[t2][x2] >= LINK_TUP ) {
+        linkdir = field[t2][x2] - LINK_TUP;
         int t3 = tdir(t2,linkdir), x3 = xdir(x2,linkdir);
 
         field[t][x] = 0;
         link_off(t2,x2,linkdir); link_on(t,x,nu);
-        field[t3][x3]=1;
+        field[t3][x3] = MONOMER;
       
         t = t3; x = x3;
         success = 1;
@@ -730,6 +930,7 @@ int add_link()
       }
     } else {
       double p=( n_legalemptylinks/((double)n_links+1) ) * U*d*d;
+      //printf(" Adding, p %g le %d ll %d\n", p, n_legalemptylinks, n_links+1);
       if( mersenne() < p ) {
         new_link(t,x,nu);
         success = 1;
@@ -769,7 +970,8 @@ int remove_link()
       t2 = tdir(t,nu); x2 = xdir(x,nu);
 
       double M = det_removed_link(t,x,t2,x2);
-      double p = ( n_links/((double)n_legalemptylinks+1) ) * M*M/U;
+      double p = ( n_links/((double) n_legal_links_after_removing(t,x,t2,x2) ) ) * M*M/U;
+      //printf(" Removing, p %g det %g ll %d le %d\n",p,M*M,n_links,n_legal_links_after_removing(t,x,t2,x2));
       if( mersenne() < p ){
         removed_link(t,x,nu);
         success = 1;
@@ -806,66 +1008,32 @@ int update()
 /* Propagator
  */
 void measure_propagator(){
-  double free_propagators[VOLUME*VOLUME/4];
-
-  int i=0, n_free_sites=0;;
-  for (int t1=0; t1<NT; t1++) for (int x1=0; x1<NX; x1++) 
-  if( (t1+x1)%2==0 ) if( field[t1][x1] == 0 ) {
-    for (int t2=0; t2<NT; t2++) for (int x2=0; x2<NX; x2++)
-    if( (t2+x2)%2==1 ) if( field[t2][x2] == 0 ) {
-      free_propagators[i] = fM_index( t1, x1, t2, x2 );
-      i++;
-    }
-    n_free_sites++;
-  }
-  if( n_free_sites > 0 ) {
   
-  int ipiv[n_free_sites];
-  int info;
-  int lwork=n_free_sites*n_free_sites;
-  double *work;
-
-  work = malloc( lwork*sizeof(double) );
-  
-  // LU decompose
-  LAPACK_dgetrf( &n_free_sites, &n_free_sites, free_propagators, &n_free_sites, ipiv, &info );
-  if( info != 0 ) {
-    printf("measure_propagator: sgetrf returned an error %d! \n", info);
-    exit(-1);
-  }
-
-  LAPACK_dgetri(&n_free_sites, free_propagators, &n_free_sites, ipiv, work, &lwork, &info);
-  if( info != 0 ) {
-    printf("measure_propagator: sgetri returned an error %d! \n", info);
-    exit(-1);
-  }
-
-  free(work);
-
   double prop[NT];
-  double q[NT];
+  double j[NT];
   for( int t1=0; t1<NT; t1++){
-    prop[t1]=0; q[t1] = 0;
+    prop[t1]=0; j[t1] = 0;
   }
 
-  int i=0;
-  for( int t1=0; t1<NT; t1++) for( int x1=0; x1<NX; x1++)
-  if( (t1+x1)%2==0 ) if( field[t1][x1] == 0 )
-  for( int t2=0; t2<NT; t2++) for( int x2=0; x2<NX; x2++)
-  if( (t2+x2)%2==1 ) if( field[t2][x2] == 0 ) {
-      prop[(t2-t1+NT)%NT] += 2*free_propagators[i];
-
-      if( x1==x2 && t2==tdir(t1,0) ) q[t1]+= free_propagators[i];
-
-      i++;
-  }
-
-  for( int t1=0; t1<NT; t1++) printf("Propagator %d %g\n", t1, prop[t1]/(NX*NX) );
-  for( int t1=0; t1<NT; t1++) printf("Charge %d %g\n", t1, q[t1] );
+  double source[NX][NT], propagator[NT][NX];
   
-  } else { //No free sites
-    for( int t1=0; t1<NT; t1++) printf("Propagator %d %g\n", t1, 0.0);
+  for( int t1=0;t1<NT;t1++) {
+    //int t1=2;
+    vec_zero( source );
+
+    for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ) source[t1][x1] = 1;
+    
+    cg_propagator(propagator,source);
+    
+    for( int t2=0; t2<NT; t2++) for( int x2=0; x2<NX; x2++)
+      prop[(t2-t1+NT)%NT] += propagator[t2][x2];
+
+    for( int x1=0;x1<NX;x1++) j[t1] += propagator[tup[t1]][x1];
+    for( int x1=0;x1<NX;x1++) j[tdn[t1]] += propagator[tdn[t1]][x1];
   }
+  
+  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, prop[t2]/(VOLUME*NX) );
+  for( int t1=0;t1<NT;t1++)  printf("Current %d %g\n", t1, j[t1]/2 );
 }
 
 
@@ -877,110 +1045,145 @@ void measure_propagator(){
  * susceptibility , Z_J/Z_0 = U*NDIRS/V * dZ_J/dJ |_J=0.
  */
 void measure_susceptibility(){
+ int n = n_bc_monomers/2 + n_bc_links;
+ int steps = 0;
+ int n_attempts=100;
+
+ /* Do multiple attemps, these are cheap and the result is usually 0 */
+ for( int attempt=0; attempt<n_attempts; attempt++ ){
   /* Pick a site  */
   int s1 = mersenne()*VOLUME ;
   int t1 = s1/NX, x1=s1%NX, t2,x2;
-  int steps=0;
 
   //printf("measure_susceptibility: Initial site %d, (%d,%d), field %d\n",s1,t1,x1,field[t1][x1]);
-  if(field[t1][x1]>1){
-    /* Chose a link, switch it to a pair of source monomers */
-    int dir = field[t1][x1]-2;
-    link_off(t1,x1,dir); //Just turn off, remember original position
+  if(field[t1][x1] >= LINK_TUP ){
+   /* Chose a link, switch it to a pair of source monomers */
+   int dir = field[t1][x1] - LINK_TUP;
+   link_off(t1,x1,dir); 
     
-    t2 = tdir(t1,dir), x2 = xdir(x1,dir);
-    field[t1][x1]=6; field[t2][x2]=6;
-    //print_config();
-  } else {
-    printf("Susceptibility %d \n", 0);
-    return ;
-  }
+   t2 = tdir(t1,dir), x2 = xdir(x1,dir);
+   field[t1][x1] = SOURCE_MONOMER ; field[t2][x2] = SOURCE_MONOMER ;
+   
+   for(;; steps++ ){
+   /* Now we are at (t2,x2), and the link is off. Try to move. */
+     int dir = NDIRS*mersenne();
+     int t3 = tdir(t2,dir), x3 = xdir(x2,dir);
 
-  for(;; steps++ ){
-    /* Now we are at (t2,x2), and the link is off. Try to find another link. */
-    //printf("measure_susceptibility: Site (%d,%d), field %d\n",t2,x2,field[t2][x2]);
-    int dir = NDIRS*mersenne();
-    int t3 = tdir(t2,dir), x3 = xdir(x2,dir);
-    if( t3==t1 && x3==x1 ) {
+     if( t3==t1 && x3==x1 ) {
       /* Back at the original site, turn into a link */
       field[t1][x1]=0; field[t2][x2]=0;
       link_on(t2,x2,dir);
-      //print_config();
       break;
-    }
 
-    //printf("measure_susceptibility: Trying site (%d,%d), field %d\n",t3,x3,field[t3][x3]);
-  
-    if( field[t3][x3] > 1 ) {
+    } else if( field[t3][x3] >= LINK_TUP ) {
       /* found a link, flip it */
-      int linkdir = field[t3][x3] - 2;
+      int linkdir = field[t3][x3] - LINK_TUP;
       int t4 = tdir(t3,linkdir), x4 = xdir(x3,linkdir);
 
       field[t2][x2] = 0;
       link_off(t3,x3,linkdir); link_on(t2,x2,dir);
-      field[t4][x4]=6;
+      field[t4][x4] = SOURCE_MONOMER;
 
       t2 = t4; x2 = x4;
 
-      //print_config();
-    } else if( field[t3][x3] == 1 ) {
+    } else if( field[t3][x3] == MONOMER ) {
       /* Monomer found, change places */
-      field[t2][x2] = 1; field[t3][x3] = 6;
+      field[t2][x2] = MONOMER; field[t3][x3] = SOURCE_MONOMER;
+
       t2 = t3; x2 = x3;
-      //print_config();
+
     } else if( field[t3][x3] == 0 ) {
       /* Nothing there, try to hop over */
       int dir2 = NDIRS*mersenne();
       int t4 = tdir(t3,dir2), x4 = xdir(x3,dir2);
+
       if( field[t4][x4] == 0 ) {
+        /* Check for the chosen sites in added and removed lists */
+        int s = (t2*NX+x2)/2;
+        int old_site=1;
+        if( (t2+x2)%2==0 ) for( int k=0; k<n_added_even; k++ ) if( added_evensites[k] == s )
+           old_site = 0;
+        if( (t2+x2)%2==1 ) for( int k=0; k<n_added_odd; k++ ) if( added_oddsites[k] == s )
+           old_site = 0;
+
+        s = (t4*NX+x4)/2;
+        int new_site=1;
+        if( (t2+x2)%2==0 ) for( int k=0; k<n_removed_even; k++ ) if( evenlist[removed_evenlist[k]] == s )
+           new_site = 0;
+        if( (t2+x2)%2==1 ) for( int k=0; k<n_removed_odd; k++ ) if( oddlist[removed_oddlist[k]] == s )
+           new_site = 0;
+
+        /* Get the difference in the determinant */
         double det;
-
-        if( (t4+x4)%2 == 0 ) {
-          added_evensites[0] = (t4*NX+x4)/2;
-
-          int n = n_bc_monomers/2 + n_bc_links;
-          /* Block matrices used in constructing the fluctuation matrix F */
-          for( int l=0; l<n; l++)
-            B[0][l] = Dinv[added_evensites[0]*VOLUME/2+oddlist[l]];
-          for( int k=0; k<n; k++) if( evenlist[k] == (t2*NX+x2)/2 )
-            removed_evenlist[0] = k;
-          det = extended_determinant(1,0,1,0);
-        } else {
-          added_oddsites[0] = (NX*t4 + x4)/2;
- 
-          int n = n_bc_monomers/2 + n_bc_links;
-          /* Block matrices used in constructing the fluctuation matrix F */
-          for( int k=0; k<n; k++)
-            C[0][k] = Dinv[evenlist[k]*VOLUME/2+added_oddsites[0]];
-          for( int k=0; k<n; k++) if( oddlist[k] == (t2*NX+x2)/2 )
-           removed_oddlist[0] = k;
-          det = extended_determinant(0,1,0,1);
-           
-        }
+        det = det_moved_monomer( t2, x2, t4, x4 );
+        
         if( mersenne() < det*det ){
           /* Accepted */
-          field[t2][x2] = 0; field[t4][x4] = 6;
-          t2 = t4; x2 = x4;
-          det_save = det_save*det/previous_accepted_det;
-          previous_accepted_det = previous_det = det;
+          int s = (t2*NT+x2)/2;
+          if( old_site ) {
+            if( (t2+x2)%2==0 ) { /* The lists are already ordered properly, so just adjust lengths */
+              n_added_even++;
+              n_removed_even++;
+            } else {
+              n_removed_odd++;
+              n_added_odd++;
+            }
+          }
+          if( !new_site ) {   // Found in the list of removed sites
+            if( (t2+x2)%2==0 ) {
+              n_added_even--;
+              n_removed_even--;
+            } else {
+              n_removed_odd--;
+              n_added_odd--;
+            }
+          }
 
+          field[t2][x2] = 0; field[t4][x4] = SOURCE_MONOMER;
+          t2 = t4; x2 = x4;
+          det_save = det_save*previous_det/previous_accepted_det;
+          previous_accepted_det = previous_det;
+
+          #ifdef DEBUG
           //print_config();
-          //Just update background, TODO: Implement with fluctuation matrix
-          update_background();
-          n_removed_even=n_removed_odd=0;
-          n_added_even=n_added_odd=0;
+          check_det();
+          #endif
+          if(n_added_even == MAX_CHANGES || n_added_odd == MAX_CHANGES ||
+             n_removed_even == MAX_CHANGES || n_removed_odd == MAX_CHANGES ){
+            update_background();
+            n_removed_even=n_removed_odd=0;
+            n_added_even=n_added_odd=0;
+          }
+        } else {
+          /* Rejected */
+          if(!old_site){
+            if( (t2+x2)%2==0 ) {
+              added_evensites[n_added_even-1] = (t2*NX+x2)/2;
+            } else {
+              added_oddsites[n_added_odd-1] = (t2*NX+x2)/2;
+            }
+          }
+          if( !new_site ) {
+            if( (t2+x2)%2==0 ) {
+              for( int k=0; k<n; k++ ) if( evenlist[k] == s )
+                removed_evenlist[n_removed_even-1] = k;
+            } else {
+              for( int k=0; k<n; k++ ) if( oddlist[k] == s )
+                removed_oddlist[n_removed_odd-1] = k;
+            }
+          }
         }
-      } else if( field[t4][x4] == 0 ) {
-        /* Monomer, switch */
-        field[t2][x2] = 1; field[t4][x4] = 6;
-        t2 = t4; x2 = x4;
       }
-    }
-  }
- 
-  printf("Susceptibility %g \n",(double)steps/(U*NDIRS));
+
+    } //neighbouring site (t2,x2)
+   } //steps 
+  } //First site site (t2,x2)
+ } //attempts
+
+ update_linklists();
+
+ printf("Susceptibility %g \n",(double)steps/(U*NDIRS*n_attempts));
   
-  update_linklists();
 }
 
 
@@ -991,12 +1194,12 @@ void print_config()
   for (int t=0; t<NT; t++) {
     for (int x=0; x<NX; x++){
       int empty = 1;
-      if(field[t][x]==1) { empty = 0; printf(" o "); }
-      if(field[t][x]==2) { empty = 0; printf(" | "); }
-      if(field[t][x]==3) { empty = 0; printf(" --"); }
-      if(field[t][x]==4) { empty = 0; printf(" | "); }
-      if(field[t][x]==5) { empty = 0; printf("-- "); }
-      if(field[t][x]==6) { empty = 0; printf(" x "); } //A source monomer
+      if(field[t][x]==MONOMER)  { empty = 0; printf(" o "); }
+      if(field[t][x]==LINK_TUP) { empty = 0; printf(" | "); }
+      if(field[t][x]==LINK_XUP) { empty = 0; printf(" --"); }
+      if(field[t][x]==LINK_TDN) { empty = 0; printf(" | "); }
+      if(field[t][x]==LINK_XDN) { empty = 0; printf("-- "); }
+      if(field[t][x]==SOURCE_MONOMER) { empty = 0; printf(" x "); } //A source monomer
       if(empty==1) { printf(" . "); }
     }
     printf(" \n");
@@ -1007,14 +1210,10 @@ void print_config()
 
 static int measurement = 0;
 void measure()
-{
-  update_background();
-  n_added_even = n_added_odd = 0;
-  n_removed_even = n_removed_odd = 0;
-
-//#ifdef DEBUG
+{ 
+#ifdef DEBUG
   print_config();
-//#endif
+#endif
 
   measure_propagator();
   measure_susceptibility();
@@ -1076,6 +1275,8 @@ int main(int argc, char* argv[])
   Ginv = malloc( VOLUME*VOLUME*sizeof(double)/4 );
   evenlist = malloc( VOLUME*sizeof(int)/2 );
   oddlist  = malloc( VOLUME*sizeof(int)/2 );
+  unoccupied_evenlist = malloc( VOLUME*sizeof(int)/2 );
+  unoccupied_oddlist  = malloc( VOLUME*sizeof(int)/2 );
   if (NULL == Dinv) {
     fprintf(stderr, "failed to allocate Dinv\n");
     return(-1);
@@ -1135,6 +1336,12 @@ int main(int argc, char* argv[])
     changes += update();
 
     if((i%n_measure)==0){
+
+      /* Update the background and cound links and monomers */
+      update_background();
+      n_added_even = n_added_odd = 0;
+      n_removed_even = n_removed_odd = 0;
+
       /* Time and report */
       gettimeofday(&end,NULL);
       int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
@@ -1207,7 +1414,7 @@ void check_det(  )
         j++;
       }
     } else 
-    if( field[t][x] == 2) {
+    if( field[t][x] == 2+TUP) {
       if((t+x)%2==0) {
         check_evenlist[i] = (NX/2)*t + x/2;
         check_oddlist[j] = (NX/2)*tup[t] + x/2;
@@ -1218,7 +1425,7 @@ void check_det(  )
         i++; j++;
       }
     } else
-    if(field[t][x] == 3) {
+    if(field[t][x] == 2+XUP) {
       if((t+x)%2==0) {
         check_evenlist[i] = (NX/2)*t + x/2;
         check_oddlist[j] = (NX/2)*t + xup[x]/2;
@@ -1228,11 +1435,20 @@ void check_det(  )
         check_evenlist[i] = (NX/2)*t + xup[x]/2;
         i++; j++;
       }
+    } else
+    if(field[t][x]==2+NDIRS) {
+      if((t+x)%2==0) {
+        check_evenlist[i] = (NX/2)*t + x/2;
+        i++; //n++;
+      } else {
+        check_oddlist[j] = (NX/2)*t + x/2;
+        j++; //count only once, no n++ here
+      }
     }
   }
   if(i!=j || j!=n){
     printf("Number on occupied sites doesn't match, i=%d, j=%d, n=%d, n_links=%d, n_monomers=%d\n",i,j,n,n_links,n_monomers);
-    print_config();
+    //print_config();
     exit(1);
   }
 
@@ -1259,12 +1475,41 @@ void check_det(  )
  }
 
  double diff =  fabs(det) - fabs(det_save);
- printf("EXACT det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
+ printf("CHECK det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
  if(diff*diff/(det*det)>0.001){
    fprintf(stderr, " Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
    exit(1);
  }
 }
+
+/* LAPACK LU loses to cg when L~200 */
+void calc_Dinv_cg( )
+{
+  int n=VOLUME/2;
+
+  struct timeval start, end;
+  gettimeofday(&start,NULL);
+
+  /* Construct the full Volume to Volume Dirac matrix
+   * Odd to even here, the inverse will be even to odd
+   */
+  for (int t1=0; t1<NT; t1++) for (int x1=0; x1<NX; x1++) if((t1+x1)%2==1) {
+    int i1 = (NX*t1 + x1)/2;
+    double source[NT][NX], propagator[NT][NX];
+    vec_zero(source);
+    source[t1][x1] = 1;
+    cg_propagator( propagator, source );
+    for (int t2=0; t2<NT; t2++) for (int x2=0; x2<NX; x2++) if((t2+x2)%2==0) {
+      int i2 = (NX*t2 + x2)/2;
+      Dinv[i2*n + i1] = propagator[t2][x2];
+    }
+  }
+
+  gettimeofday(&end,NULL);
+  int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
+  printf("Inverted fermion matrix in %.3g seconds\n", 1e-6*diff);
+}
+
 
 #endif
 
