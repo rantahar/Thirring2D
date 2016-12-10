@@ -5,9 +5,9 @@
  * represented as dimers (occupied links). 
  *
  ****************************************************************/
-
-
-
+#ifdef DEBUG
+#include <fenv.h>
+#endif
 
 #include "Thirring.h"
 
@@ -124,20 +124,28 @@ double fM_index( int t1, int x1, int t2, int x2 )
       if (x2>x1) { return -eta[t1][x1][1] ; }
       else { return eta[t1][x1][1] ; }
 #else
-      if (x2>x1) { return -0.5*eta[t1][x1][1] ; }
-      else { return 0.5*eta[t1][x1][1] ; }
+      if (x2>x1) { return 0.5*eta[t1][x1][1] ; }
+      else { return -0.5*eta[t1][x1][1] ; }
 #endif
     }
     else return( 0.0 );
   }
   else if ( x1==x2  ) {
-    if( t2 == tup[t1] || t2 == tdn[t1] ) {
+    if( t2 == tup[t1] ){
 #if NT==2
-      if (t2>t1) { return -exp(mu)*eta[t1][x1][0] ; }
-      else { return exp(mu)*eta[t1][x1][0] ; }
+      if (t2>t1) { return -eta[t1][x1][0] ; }
+      else { return eta[t1][x1][0] ; }
 #else
-      if (t2>t1) { return -0.5*exp(mu)*eta[t1][x1][0] ; }
-      else { return 0.5*exp(mu)*eta[t1][x1][0] ; }
+      if (t2>t1) { return 0.5*exp(mu)*eta[t1][x1][0] ; }
+      else { return -0.5*exp(mu)*eta[t1][x1][0] ; }
+#endif
+    } else if ( t2 == tdn[t1] ) {
+#if NT==2
+      if (t2>t1) { return -eta[t1][x1][0] ; }
+      else { return eta[t1][x1][0] ; }
+#else
+      if (t2>t1) { return 0.5*exp(-mu)*eta[t1][x1][0] ; }
+      else { return -0.5*exp(-mu)*eta[t1][x1][0] ; }
 #endif
     }
     else return( 0.0 );
@@ -154,51 +162,90 @@ void calc_Dinv( )
   int info;
   int lwork=n*n;
   double *work;
-  
-  struct timeval start, end;
-  gettimeofday(&start,NULL);
+  double *M;
 
-  /* Construct the full Volume to Volume Dirac matrix
-   * Odd to even here, the inverse will be even to odd
-   */
-  work = malloc( lwork*sizeof(double) );
-  for (int t1=0; t1<NT; t1++) for (int x1=0; x1<NX; x1++) if((t1+x1)%2==0) {
-    int i1 = (NX*t1 + x1)/2;
-    for (int t2=0; t2<NT; t2++) for (int x2=0; x2<NX; x2++) if((t2+x2)%2==1) {
-      int i2 = (NX*t2 + x2)/2;
-      Dinv[i2*n + i1] = fM_index( t1, x1, t2, x2 );
+  FILE * Dinv_file;
+  char filename[100];
+  sprintf(filename, "free_propagator_T%dX%d",NT,NX);
+  
+  Dinv_file = fopen(filename,"rb");
+  if (Dinv_file){
+    fread(Dinv, VOLUME*VOLUME/2, sizeof(double), Dinv_file);
+    fclose(Dinv_file);
+  } else {
+  
+    struct timeval start, end;
+    gettimeofday(&start,NULL);
+
+    /* Construct the full Volume to Volume Dirac matrix
+     * Odd to even here, the inverse will be even to odd
+     */
+    work = malloc( lwork*sizeof(double) );
+    M = malloc( lwork*sizeof(double) );
+    for (int t1=0; t1<NT; t1++) for (int x1=0; x1<NX; x1++) if((t1+x1)%2==0) {
+      int i1 = (NX*t1 + x1)/2;
+      for (int t2=0; t2<NT; t2++) for (int x2=0; x2<NX; x2++) if((t2+x2)%2==1) {
+        int i2 = (NX*t2 + x2)/2;
+        M[i2*n + i1] = fM_index( t1, x1, t2, x2 );
+      }
+    }
+
+    // LU decompose
+    LAPACK_dgetrf( &n, &n, M, &n, ipiv, &info );
+    if( info != 0 ) {
+      printf("calc_Dinv: sgetrf returned an error %d! \n", info);
+      exit(-1);
+    }
+    LAPACK_dgetri(&n, M, &n, ipiv, work, &lwork, &info);
+    if( info != 0 ) {
+      printf("calc_Dinv: sgetri returned an error %d! \n", info);
+      exit(-1);
+    }
+
+    for(int i = 0; i < n*n; i++) Dinv[i] = M[i];
+
+    /* Even to odd */
+    for (int t1=0; t1<NT; t1++) for (int x1=0; x1<NX; x1++) if((t1+x1)%2==1) {
+      int i1 = (NX*t1 + x1)/2;
+      for (int t2=0; t2<NT; t2++) for (int x2=0; x2<NX; x2++) if((t2+x2)%2==0) {
+        int i2 = (NX*t2 + x2)/2;
+        M[i2*n + i1] = fM_index( t1, x1, t2, x2 );
+      }
+    }
+
+    // LU decompose
+    LAPACK_dgetrf( &n, &n, M, &n, ipiv, &info );
+    if( info != 0 ) {
+      printf("calc_Dinv: sgetrf returned an error %d! \n", info);
+      exit(-1);
+    }
+    LAPACK_dgetri(&n, M, &n, ipiv, work, &lwork, &info);
+    if( info != 0 ) {
+      printf("calc_Dinv: sgetri returned an error %d! \n", info);
+      exit(-1);
+    }
+  
+    for(int i = 0; i < n*n; i++) Dinv[n*n+i] = M[i];
+
+    free(work);
+    free(M);
+
+    gettimeofday(&end,NULL);
+    int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
+
+    printf("Inverted fermion matrix in %.3g seconds\n", 1e-6*diff);
+    Dinv_file = fopen(filename,"wb");
+    if (Dinv_file){
+      fwrite(Dinv, VOLUME*VOLUME/2, sizeof(double), Dinv_file);
+      fclose(Dinv_file);
     }
   }
-
-
-  // LU decompose
-
-  LAPACK_dgetrf( &n, &n, Dinv, &n, ipiv, &info );
-  if( info != 0 ) {
-    printf("calc_Dinv: sgetrf returned an error %d! \n", info);
-    exit(-1);
-  }
-  LAPACK_dgetri(&n, Dinv, &n, ipiv, work, &lwork, &info);
-  if( info != 0 ) {
-    printf("calc_Dinv: sgetri returned an error %d! \n", info);
-    exit(-1);
-  }
   
-  free(work);
-
-  gettimeofday(&end,NULL);
-  int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
-
-  printf("Inverted fermion matrix in %.3g seconds\n", 1e-6*diff);
 }
 
 
 /* Matrices needed for the fluctuation matrix */
-double GC[VOLUME/2][VOLUME/2];
-double B[VOLUME/2][VOLUME/2],C[VOLUME/2][VOLUME/2];
-double BAP[VOLUME/2][VOLUME/2];
-double PAC[VOLUME/2][VOLUME/2];
-double BGC[VOLUME/2][VOLUME/2];
+double **BAPe, **PACe, **BGCe, **BAPo, **PACo, **BGCo;
 
 /* Invert the matrix of propagators between occupied sites
  * Assing the current configuration as the background
@@ -206,19 +253,43 @@ double BGC[VOLUME/2][VOLUME/2];
 double previous_accepted_det = 1;
 double previous_det = 1;
 double det_save = 1;
+int det_sign=1;
+int previous_sign=1;
 void update_background( )
 {
+
+ static int init = 1;
+ if(init==1){
+   BAPe = malloc(VOLUME/2*sizeof(double*));
+   PACe = malloc(VOLUME/2*sizeof(double*));
+   BGCe = malloc(VOLUME/2*sizeof(double*));
+   BAPo = malloc(VOLUME/2*sizeof(double*));
+   PACo = malloc(VOLUME/2*sizeof(double*));
+   BGCo = malloc(VOLUME/2*sizeof(double*));
+   for(int i=0; i<VOLUME/2; i++){
+     BAPe[i] = malloc(VOLUME/2*sizeof(double));
+     PACe[i] = malloc(VOLUME/2*sizeof(double));
+     BGCe[i] = malloc(VOLUME/2*sizeof(double));
+     BAPo[i] = malloc(VOLUME/2*sizeof(double));
+     PACo[i] = malloc(VOLUME/2*sizeof(double));
+     BGCo[i] = malloc(VOLUME/2*sizeof(double));
+   }
+   init=0;
+ }
+
  /* The current configuration becomes the background */
  n_bc_monomers = n_monomers;
  n_bc_links = n_links;
 
- double det=1; 
+ double det_e=1, det_o=1; 
  int n = n_monomers/2 + n_links;
  int m = VOLUME/2 - n;
+ double *Ginv_odd = Ginv+n*n;
+ double *Dinv_odd = Dinv+VOLUME*VOLUME/4;
 
  /*If no occupied sites, determinant of rank 0 is 1 */
  if( n > 0 ){
-  int ipiv[n];
+  int ipiv[n],ipiv_o[n];
   int info;
   
   /* Find occupied and unoccupied sites, construct lists */
@@ -253,99 +324,141 @@ void update_background( )
   for(int i=0; i<n; i++){
     for(int j=0; j<n; j++){
       Ginv[i*n+j] = Dinv[evenlist[i]*VOLUME/2+oddlist[j]];
+      Ginv_odd[i*n+j] = Dinv_odd[oddlist[i]*VOLUME/2+evenlist[j]];
     }
   }
 
   /* LU */
-  LAPACK_dgetrf( &n, &n, Ginv, &n, ipiv, &info ); 
+  LAPACK_dgetrf( &n, &n, Ginv, &n, ipiv, &info );
   if( info != 0 ) {
-    fprintf(stderr, "sgetrf returned error %d (zero determinant has been accepted)! \n", info);
-    fprintf(stderr, " Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
-    exit(-1);
+    printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
+    //exit(-1);
   }
-  
+  LAPACK_dgetrf( &n, &n, Ginv_odd, &n, ipiv_o, &info );
+  if( info != 0 ) {
+    printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
+    //exit(-1);
+  }
+
   /* determinant from LU ( for debugging ) */
   for(int i=0; i<n; i++) {
-    det *= Ginv[i*n+i];
+    if(ipiv[i]==i+1) { det_e *= Ginv[i*n+i];}
+    else { det_e *= -Ginv[i*n+i]; }
+    if(ipiv_o[i]==i+1) { det_o *= -Ginv_odd[i*n+i];}
+    else { det_o *= Ginv_odd[i*n+i]; }
   }
+
 
   /* The inversion */
   int lwork=n*n;
   double *work;
   work = malloc( lwork*sizeof(double) );
   if (NULL == work) {
-    fprintf(stderr, "failed to allocate work matrix in update_background (size n=%d) \n",n);
-    exit(-1);
+    printf("failed to allocate work matrix in update_background (size n=%d) \n",n);
+    //exit(-1);
   }
   
   LAPACK_dgetri(&n, Ginv, &n, ipiv, work, &lwork, &info);
   if( info != 0 ) {
     printf("sgetri returned error %d! \n", info);
-    exit(-1);
+    //exit(-1);
+  }
+  LAPACK_dgetri(&n, Ginv_odd, &n, ipiv_o, work, &lwork, &info);
+  if( info != 0 ) {
+    printf("sgetri returned error %d! \n", info);
+    //exit(-1);
   }
   
   free(work);
  }
 
- double diff =  fabs(det) - fabs(det_save);
+ //printf( "even %4.3g odd %4.3g  n=%d\n", det_e, det_o, n );
+ double diff =  fabs(det_e*det_o) - det_save;
 #ifdef DEBUG
- printf("EXACT det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
+ printf("EXACT det %g  accepted %g  diff %g, accepted factor %g \n", det_e*det_o, det_save, diff, previous_accepted_det);
 #endif
- if(diff*diff/(det*det)>0.001){
-   fprintf(stderr, " Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
-   exit(1);
+ if(diff/(det_e*det_o)>0.0000001){
+   printf(" Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",fabs(det_e*det_o), det_save, diff, previous_accepted_det);
+   //exit(1);
  }
- det_save = det;
+ det_save = fabs(det_e*det_o);
  previous_accepted_det = previous_det = 1;
+ previous_sign = det_sign = 1-2*(det_e*det_o<0);
 
 
   /* Construct the entries of the fluctuation matrix */
-  double A[n*n];
-  for( int a=0; a<VOLUME/2; a++ ) for( int l=0; l<n; l++)
-    B[a][l] = Dinv[a*VOLUME/2+oddlist[l]];
-
-  for( int a=0; a<n; a++) for( int l=0; l<n; l++)
-    A[a*n+l] = Ginv[l*n+a];
-  for( int a=0; a<n; a++) for( int b=0; b<VOLUME/2; b++)
-  { 
-    BAP[a][b] = 0;
-    for( int l=0; l<n; l++) BAP[a][b] += B[b][l]*A[a*n+l];
-  }
-
+  /* Even to odd */
+  double *B;
+  B = malloc( sizeof(double)*VOLUME*VOLUME/4 );
   for( int a=0; a<VOLUME/2; a++ ) for( int k=0; k<n; k++)
-    C[a][k] = Dinv[evenlist[k]*VOLUME/2+a];
-  for( int b=0; b<n; b++) for( int k=0; k<n; k++)
-    A[b*n+k] = Ginv[b*n+k];
+    B[a*VOLUME/2+k] = Dinv[evenlist[k]*VOLUME/2+a];
   for( int a=0; a<VOLUME/2; a++) for( int b=0; b<n; b++)
   { 
-    PAC[a][b] = 0;
-    for( int k=0; k<n; k++) PAC[a][b] -= A[b*n+k]*C[a][k];
+    PACe[a][b] = 0;
+    for( int k=0; k<n; k++) PACe[a][b] -= Ginv[b*n+k]*B[a*VOLUME/2+k];
   }
 
-
-  for( int a=0; a<VOLUME/2; a++ ) for( int l=0; l<n; l++){
-    GC[a][l] = 0;
-      for( int k=0; k<n; k++) GC[a][l] += Ginv[l*n+k]*C[a][k];
+  for( int a=0; a<VOLUME/2; a++ ) for( int l=0; l<n; l++)
+    B[a*VOLUME/2+l] = Dinv[a*VOLUME/2+oddlist[l]];
+  for( int a=0; a<n; a++) for( int b=0; b<VOLUME/2; b++)
+  { 
+    BAPe[a][b] = 0;
+    for( int l=0; l<n; l++) BAPe[a][b] += B[b*VOLUME/2+l]*Ginv[l*n+a];
   }
 
   for( int b=0; b<VOLUME/2; b++) for( int a=0; a<VOLUME/2; a++){
-    BGC[b][a] = 0;
+    BGCe[b][a] = 0;
     for( int l=0; l<n; l++)
-      BGC[b][a] += B[b][l]*GC[a][l];
-    BGC[b][a] = Dinv[b*VOLUME/2+a] - BGC[b][a];
+      BGCe[b][a] += B[b*VOLUME/2+l]*PACe[a][l];
+    BGCe[b][a] = Dinv[b*VOLUME/2+a] + BGCe[b][a];
   }
+
+  /* Odd to even */
+  for( int a=0; a<VOLUME/2; a++ ) for( int k=0; k<n; k++)
+    B[a*VOLUME/2+k] = Dinv_odd[oddlist[k]*VOLUME/2+a];
+  for( int a=0; a<VOLUME/2; a++) for( int b=0; b<n; b++)
+  { 
+    PACo[a][b] = 0;
+    for( int l=0; l<n; l++) PACo[a][b] -= Ginv_odd[b*n+l]*B[a*VOLUME/2+l];
+  }
+  for( int a=0; a<VOLUME/2; a++ ) for( int l=0; l<n; l++)
+    B[a*VOLUME/2+l] = Dinv_odd[a*VOLUME/2+evenlist[l]];
+  for( int a=0; a<n; a++) for( int b=0; b<VOLUME/2; b++)
+  { 
+    BAPo[a][b] = 0;
+    for( int l=0; l<n; l++) BAPo[a][b] += B[b*VOLUME/2+l]*Ginv_odd[l*n+a];
+  }
+
+  for( int b=0; b<VOLUME/2; b++) for( int a=0; a<VOLUME/2; a++){
+    BGCo[b][a] = 0;
+    for( int l=0; l<n; l++)
+      BGCo[b][a] += B[b*VOLUME/2+l]*PACo[a][l];
+    BGCo[b][a] = Dinv_odd[b*VOLUME/2+a] + BGCo[b][a];
+  }
+
+  free(B);
 }
 
 
 /* Update the links and monomers
  */
-int legalemptylinks[ND*VOLUME];
-int legalmonomers[ND*VOLUME];
-int links[ND*VOLUME];   /* all links are legal */
+int *legalemptylinks;
+int *legalmonomers;
+int *links;   /* all links are legal */
 int n_legalemptylinks=0;
 int n_legalmonomers=0;
 
 void update_linklists(){
+  static int init=1;
+  if(init==1){
+    legalemptylinks = malloc(ND*VOLUME*sizeof(int));
+    legalmonomers = malloc(ND*VOLUME*sizeof(int));
+    links = malloc(ND*VOLUME*sizeof(int));
+    init = 0;
+  }
+
   n_links=0; n_legalemptylinks=0; n_legalmonomers=0;
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++)
     if( field[t][x] >= LINK_TUP && field[t][x] < LINK_TUP+ND  ){    //  Count each link once
@@ -411,6 +524,7 @@ void new_link(int t, int x, int nu){
   link_on(t,x,nu);
   det_save = det_save*previous_det/previous_accepted_det;
   previous_accepted_det = previous_det;
+  det_sign = previous_sign;
 
   int t2 = tdir(t,nu), x2=xdir(x,nu);
   int s1 = (t*NX + x)/2, s2 = (t2*NX+x2)/2;
@@ -450,6 +564,7 @@ void new_monomer(int t1, int x1, int t2, int x2){
   monomer_on(t1,x1,t2,x2);
   det_save = det_save*previous_det/previous_accepted_det;
   previous_accepted_det = previous_det;
+  det_sign = previous_sign;
 
   int s1 = (t1*NX + x1)/2, s2 = (t2*NX+x2)/2;
   
@@ -488,6 +603,7 @@ void removed_link(int t, int x, int nu){
   link_off(t,x,nu);
   det_save = det_save*previous_det/previous_accepted_det;
   previous_accepted_det = previous_det;
+  det_sign = previous_sign;
 
   int t2 = tdir(t,nu), x2=xdir(x,nu);
   int s1 = (t*NX + x)/2, s2 = (t2*NX+x2)/2;
@@ -532,6 +648,7 @@ void removed_monomer(int t1, int x1, int nu){
   int t2 = tdir(t1,nu), x2=xdir(x1,nu);
   det_save = det_save*previous_det/previous_accepted_det;
   previous_accepted_det = previous_det;
+  det_sign = previous_sign;
 
   if( (t1+x1)%2 == 1 ) { int t=t2, x=x2; t2=t1;x2=x1; t1=t;x1=x;}
 
@@ -582,15 +699,19 @@ double extended_determinant( int me, int mo, int re, int ro ){
 #endif
 
   if(mr==0) return 1;
-  double F[mr*mr];
+
+
+  /* Even to odd */
+  double *F;
+  F = malloc(mr*mr*sizeof(double));
   for( int b=0; b<ro; b++) for( int a=0; a<re; a++)
     F[a*mr+b] = Ginv[removed_oddlist[b]*n+removed_evenlist[a]];
   for( int a=0; a<mo; a++) for( int b=0; b<ro; b++)
-    F[(re+a)*mr+b] = PAC[added_oddsites[a]][removed_oddlist[b]];
+    F[(re+a)*mr+b] = PACe[added_oddsites[a]][removed_oddlist[b]];
   for( int a=0; a<re; a++) for( int b=0; b<me; b++)
-    F[a*mr+(ro+b)] = BAP[removed_evenlist[a]][added_evensites[b]];
+    F[a*mr+(ro+b)] = BAPe[removed_evenlist[a]][added_evensites[b]];
   for( int b=0; b<me; b++) for( int a=0; a<mo; a++)
-    F[(re+a)*mr+(ro+b)] = BGC[added_evensites[b]][added_oddsites[a]];
+    F[(re+a)*mr+(ro+b)] = BGCe[added_evensites[b]][added_oddsites[a]];
 
 
   /* determinant from LU */
@@ -599,38 +720,30 @@ double extended_determinant( int me, int mo, int re, int ro ){
   LAPACK_dgetrf( &mr, &mr, F, &mr, ipiv, &info );
   for( int a=0; a<mr; a++) det *= F[a*mr+a];
 
-  return( det );
+
+  /* Odd to even */
+  for( int b=0; b<re; b++) for( int a=0; a<ro; a++)
+    F[a*mr+b] = Ginv[n*n+removed_evenlist[b]*n+removed_oddlist[a]];
+  for( int a=0; a<me; a++) for( int b=0; b<re; b++)
+    F[(a+ro)*mr+b] = PACo[added_evensites[a]][removed_evenlist[b]];
+  for( int a=0; a<ro; a++) for( int b=0; b<mo; b++)
+    F[a*mr+(b+re)] = BAPo[removed_oddlist[a]][added_oddsites[b]];
+  for( int b=0; b<mo; b++) for( int a=0; a<me; a++)
+    F[(ro+a)*mr+(re+b)] = BGCo[added_oddsites[b]][added_evensites[a]];
+
+  /* determinant from LU */
+  LAPACK_dgetrf( &mr, &mr, F, &mr, ipiv, &info );
+  for( int a=0; a<mr; a++) det *= -F[a*mr+a];
+
+  free(F);
+
+  previous_sign = 1-2*(det<0);
+
+  return( fabs(det) );
 }
 
 
 
-
-
-int odd_site_in_removed_list( int j, int sites ){
-  int new_odd_site = 1;
-  for( int k=0; k<sites; k++ ) if( oddlist[removed_oddlist[k]] == j ) {
-    int tmp = removed_oddlist[k];
-    for( int l=k; l<sites-1; l++) removed_oddlist[l] = removed_oddlist[l+1];
-    removed_oddlist[sites-1] = tmp;
-    new_odd_site = 0;
-    break;
-  } 
-  if( new_odd_site ) added_oddsites[n_added_odd] = j;
-  return new_odd_site;
-}
-
-int even_site_in_removed_list( int j, int sites ){
-  int new_even_site = 1;
-  for( int k=0; k<sites; k++ ) if( evenlist[removed_evenlist[k]] == j ) {
-    int tmp = removed_evenlist[k];
-    for( int l=k; l<sites-1; l++) removed_evenlist[l] = removed_evenlist[l+1];
-    removed_evenlist[sites-1] = tmp;
-    new_even_site = 0;
-    break;
-  } 
-  if( new_even_site ) added_evensites[n_added_even] = j;
-  return new_even_site;
-}
 
 
 double det_added_link(int t, int x, int t2, int x2){
@@ -684,40 +797,6 @@ double det_added_link(int t, int x, int t2, int x2){
 
 
 
-
-
-int odd_site_in_list( int j, int sites ){
-  int n = n_bc_monomers/2 + n_bc_links;
-  int new_odd_site = 1;
-  for( int k=0; k<sites; k++ ) if( added_oddsites[k] == j ) {
-    for( int l=k; l<sites-1; l++) added_oddsites[l] = added_oddsites[l+1];
-    added_oddsites[sites-1] = j;
-    new_odd_site = 0;
-    break;
-  } 
-  if( new_odd_site ){
-    for( int k=0; k<n; k++){
-      printf("%d ",oddlist[k]);
-      if( oddlist[k] == j )
-        removed_oddlist[n_removed_odd] = k;
-    }
-  }
-  return new_odd_site;
-}
-
-int even_site_in_list( int i, int sites ){
-  int n = n_bc_monomers/2 + n_bc_links;
-  int new_even_site = 1;
-  for( int k=0; k<sites; k++ ) if( added_evensites[k] == i ) {
-    for( int l=k; l<sites-1; l++) added_evensites[l] = added_evensites[l+1];
-    added_evensites[sites-1] = i;
-    new_even_site = 0;
-    break;
-  } 
-  if( new_even_site ) for( int k=0; k<n; k++) if( evenlist[k] == i )
-      removed_evenlist[n_removed_even] = k;
-  return( new_even_site );
-}
 
 double det_removed_link(int t, int x, int t2, int x2 ){
   int n = n_bc_monomers/2 + n_bc_links;
@@ -867,6 +946,10 @@ double det_moved_monomer(int t, int x, int t2, int x2){
 
 
 
+
+
+
+
 /* Move monomer along a set of links  */
 int move_monomer(){
   int success = 0;
@@ -923,13 +1006,13 @@ int add_link()
 
     if( mersenne() < 0.5 ) {
       double p=( n_legalemptylinks/(double)n_legal_monomers_after_adding(t,x,t2,x2) );
-      p*= m*m*d*d;
+      p*= m*m*d;
       if( mersenne() < p ) {
         new_monomer(t,x,t2,x2);
         success = 1;
       }
     } else {
-      double p=( n_legalemptylinks/((double)n_links+1) ) * U*d*d;
+      double p=( n_legalemptylinks/((double)n_links+1) ) * U*d;
       //printf(" Adding, p %g le %d ll %d\n", p, n_legalemptylinks, n_links+1);
       if( mersenne() < p ) {
         new_link(t,x,nu);
@@ -955,7 +1038,7 @@ int remove_link()
 
       double M = det_removed_link(t,x,t2,x2);
       double p = ( n_legalmonomers/((double)n_legal_links_after_removing(t,x,t2,x2)) );
-      p *= M*M/(m*m);
+      p *= M/(m*m);
       if( mersenne() < p ){
         removed_monomer(t,x,nu);
         success = 1;
@@ -970,7 +1053,7 @@ int remove_link()
       t2 = tdir(t,nu); x2 = xdir(x,nu);
 
       double M = det_removed_link(t,x,t2,x2);
-      double p = ( n_links/((double) n_legal_links_after_removing(t,x,t2,x2) ) ) * M*M/U;
+      double p = ( n_links/((double) n_legal_links_after_removing(t,x,t2,x2) ) ) * M/U;
       //printf(" Removing, p %g det %g ll %d le %d\n",p,M*M,n_links,n_legal_links_after_removing(t,x,t2,x2));
       if( mersenne() < p ){
         removed_link(t,x,nu);
@@ -992,8 +1075,8 @@ int update()
     changes+=add_link();
   }
   #ifdef DEBUG
-  check_det( );
-  print_config();
+  //check_det( );
+  //print_config();
   #endif
   move_monomer();
   return changes;
@@ -1016,24 +1099,24 @@ void measure_propagator(){
   }
 
   double source[NX][NT], propagator[NT][NX];
-  
-  for( int t1=0;t1<NT;t1++) {
-    //int t1=2;
-    vec_zero( source );
+  vec_zero( source );
 
-    for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ) source[t1][x1] = 1;
-    
+  for( int t1=0;t1<NT;t1++) for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 )
+  {
+    source[t1][x1] = 1;
     cg_propagator(propagator,source);
     
-    for( int t2=0; t2<NT; t2++) for( int x2=0; x2<NX; x2++)
-      prop[(t2-t1+NT)%NT] += propagator[t2][x2];
+    for( int t2=0; t2<NT; t2++)
+      prop[(t2-t1+NT)%NT] += propagator[t2][x1];
 
-    for( int x1=0;x1<NX;x1++) j[t1] += propagator[tup[t1]][x1];
-    for( int x1=0;x1<NX;x1++) j[tdn[t1]] += propagator[tdn[t1]][x1];
+    j[t1] += propagator[tup[t1]][x1];
+    j[tdn[t1]] += propagator[tdn[t1]][x1];
+
+    source[t1][x1] = 0;
   }
   
-  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, prop[t2]/(VOLUME*NX) );
-  for( int t1=0;t1<NT;t1++)  printf("Current %d %g\n", t1, j[t1]/2 );
+  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, det_sign*prop[t2]/(VOLUME) );
+  for( int t1=0;t1<NT;t1++)  printf("Current %d %g\n", t1, det_sign*j[t1]/(2*NX) );
 }
 
 
@@ -1048,6 +1131,7 @@ void measure_susceptibility(){
  int n = n_bc_monomers/2 + n_bc_links;
  int steps = 0;
  int n_attempts=100;
+ int meas_sign = det_sign;
 
  /* Do multiple attemps, these are cheap and the result is usually 0 */
  for( int attempt=0; attempt<n_attempts; attempt++ ){
@@ -1060,42 +1144,52 @@ void measure_susceptibility(){
    /* Chose a link, switch it to a pair of source monomers */
    int dir = field[t1][x1] - LINK_TUP;
    link_off(t1,x1,dir); 
-    
+   
    t2 = tdir(t1,dir), x2 = xdir(x1,dir);
    field[t1][x1] = SOURCE_MONOMER ; field[t2][x2] = SOURCE_MONOMER ;
    
+   steps++;
+   
    for(;; steps++ ){
-   /* Now we are at (t2,x2), and the link is off. Try to move. */
+     //print_config();
+     //printf("measure_susceptibility: At site (%d,%d), field %d\n",t2,x2,field[t2][x2]);
+     /* Now we are at (t2,x2), and the link is off. Try to move. */
      int dir = NDIRS*mersenne();
      int t3 = tdir(t2,dir), x3 = xdir(x2,dir);
 
-     if( t3==t1 && x3==x1 ) {
-      /* Back at the original site, turn into a link */
-      field[t1][x1]=0; field[t2][x2]=0;
-      link_on(t2,x2,dir);
-      break;
+     //printf("measure_susceptibility: Trying site (%d,%d), field %d\n",t3,x3,field[t3][x3]);
 
-    } else if( field[t3][x3] >= LINK_TUP ) {
-      /* found a link, flip it */
-      int linkdir = field[t3][x3] - LINK_TUP;
-      int t4 = tdir(t3,linkdir), x4 = xdir(x3,linkdir);
+     if( mersenne() > 0.5 ){
+      /* Try to exchange with an occupied neighbor */
+      if( t3==t1 && x3==x1 ) {
+        /* Back at the original site, turn into a link */
+        field[t1][x1]=0; field[t2][x2]=0;
+        link_on(t2,x2,dir);
+        break;
 
-      field[t2][x2] = 0;
-      link_off(t3,x3,linkdir); link_on(t2,x2,dir);
-      field[t4][x4] = SOURCE_MONOMER;
+      } else if( field[t3][x3] >= LINK_TUP ) {
+        /* found a link, flip it */
+        int linkdir = field[t3][x3] - LINK_TUP;
+        int t4 = tdir(t3,linkdir), x4 = xdir(x3,linkdir);
 
-      t2 = t4; x2 = x4;
+        field[t2][x2] = 0;
+        link_off(t3,x3,linkdir); link_on(t2,x2,dir);
+        field[t4][x4] = SOURCE_MONOMER;
 
-    } else if( field[t3][x3] == MONOMER ) {
-      /* Monomer found, change places */
-      field[t2][x2] = MONOMER; field[t3][x3] = SOURCE_MONOMER;
+        t2 = t4; x2 = x4;
 
-      t2 = t3; x2 = x3;
+      } else if( field[t3][x3] == MONOMER ) {
+        /* Monomer found, change places */
+        field[t2][x2] = MONOMER; field[t3][x3] = SOURCE_MONOMER;
 
-    } else if( field[t3][x3] == 0 ) {
-      /* Nothing there, try to hop over */
+        t2 = t3; x2 = x3;
+      }
+     } else {
+      /*  Try to hop over */
       int dir2 = NDIRS*mersenne();
       int t4 = tdir(t3,dir2), x4 = xdir(x3,dir2);
+
+      //printf("measure_susceptibility: Hop over, new site (%d,%d), field %d\n",t4,x4,field[t4][x4]);
 
       if( field[t4][x4] == 0 ) {
         /* Check for the chosen sites in added and removed lists */
@@ -1117,7 +1211,7 @@ void measure_susceptibility(){
         double det;
         det = det_moved_monomer( t2, x2, t4, x4 );
         
-        if( mersenne() < det*det ){
+        if( mersenne() < det ){
           /* Accepted */
           int s = (t2*NT+x2)/2;
           if( old_site ) {
@@ -1143,10 +1237,11 @@ void measure_susceptibility(){
           t2 = t4; x2 = x4;
           det_save = det_save*previous_det/previous_accepted_det;
           previous_accepted_det = previous_det;
+          //det_sign = previous_sign;
 
           #ifdef DEBUG
           //print_config();
-          check_det();
+          //check_det();
           #endif
           if(n_added_even == MAX_CHANGES || n_added_odd == MAX_CHANGES ||
              n_removed_even == MAX_CHANGES || n_removed_odd == MAX_CHANGES ){
@@ -1175,14 +1270,14 @@ void measure_susceptibility(){
         }
       }
 
-    } //neighbouring site (t2,x2)
+    } //neighbouring site (t3,x3)
    } //steps 
   } //First site site (t2,x2)
  } //attempts
 
  update_linklists();
 
- printf("Susceptibility %g \n",(double)steps/(U*NDIRS*n_attempts));
+ printf("Susceptibility %g \n",meas_sign*(double)steps/(U*4*NDIRS*n_attempts));
   
 }
 
@@ -1212,7 +1307,7 @@ static int measurement = 0;
 void measure()
 { 
 #ifdef DEBUG
-  print_config();
+  //print_config();
 #endif
 
   measure_propagator();
@@ -1231,6 +1326,10 @@ void measure()
  */
 int main(int argc, char* argv[])
 {
+  #ifdef DEBUG
+  feenableexcept(FE_INVALID | FE_OVERFLOW);
+  #endif 
+
   int i,n_loops,n_measure,n_thermalize;
   long seed;
 
@@ -1271,8 +1370,8 @@ int main(int argc, char* argv[])
 
 
   /* allocate propagator and lists */
-  Dinv = malloc( VOLUME*VOLUME*sizeof(double)/4 );
-  Ginv = malloc( VOLUME*VOLUME*sizeof(double)/4 );
+  Dinv = malloc( VOLUME*VOLUME*sizeof(double)/2 );
+  Ginv = malloc( VOLUME*VOLUME*sizeof(double)/2 );
   evenlist = malloc( VOLUME*sizeof(int)/2 );
   oddlist  = malloc( VOLUME*sizeof(int)/2 );
   unoccupied_evenlist = malloc( VOLUME*sizeof(int)/2 );
@@ -1324,7 +1423,7 @@ int main(int argc, char* argv[])
 
   /* calculate propagators */
   calc_Dinv( );
-  det_save = 1;
+  update_background( );
   
   /* and the update/measure loop */
   int changes = 0;
@@ -1338,9 +1437,9 @@ int main(int argc, char* argv[])
     if((i%n_measure)==0){
 
       /* Update the background and cound links and monomers */
-      update_background();
-      n_added_even = n_added_odd = 0;
-      n_removed_even = n_removed_odd = 0;
+      //update_background();
+      //n_added_even = n_added_odd = 0;
+      //n_removed_even = n_removed_odd = 0;
 
       /* Time and report */
       gettimeofday(&end,NULL);
@@ -1348,9 +1447,10 @@ int main(int argc, char* argv[])
       printf("\n%d, %d updates in %.3g seconds, %d successfull changes, %g changes/update\n", i, n_measure, 1e-6*diff,changes,changes/((double) i));
       
       /* Statistics */
-      printf("MONOMERS %d \n", n_monomers);
-      printf("LINKS %d \n", n_links);
-      printf("Determinant %g \n", det_save*det_save);
+      printf("MONOMERS %d \n", det_sign*n_monomers);
+      printf("LINKS %d \n", det_sign*n_links);
+      printf("Determinant %g \n", det_sign*det_save);
+      printf("Sign %d \n", det_sign);
 
       gettimeofday(&start,NULL);
 
@@ -1388,61 +1488,31 @@ int main(int argc, char* argv[])
  */
 void check_det(  )
 {
- double det=1; 
+ double det_e=1,det_o=1; 
  int n = n_monomers/2 + n_links;
  int * check_oddlist, * check_evenlist;
- double * check_Ginv;
+ double * check_Ginv, * check_Ginv_odd;
 
  check_Ginv = malloc( VOLUME*VOLUME*sizeof(double)/4 );
+ check_Ginv_odd = malloc( VOLUME*VOLUME*sizeof(double)/4 );
  check_evenlist = malloc( VOLUME*sizeof(int)/2 );
  check_oddlist  = malloc( VOLUME*sizeof(int)/2 );
 
  /*If no occupied sites, determinant of rank 0 is 1 */
- if( n !=0 ){
-  int ipiv[n];
+ if( n > 0 ){
+  int ipiv[n],ipiv_o[n];
   int info;
   
-  /* Find occupied sites, construct lists */
-  int i=0,j=0;
+  /* Find occupied and unoccupied sites, construct lists */
+  int i=0,j=0,a=0,b=0;
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++){
-    if(field[t][x]==1) {
+    if(field[t][x]>0) {
       if((t+x)%2==0) {
-        check_evenlist[i] = (NX/2)*t + x/2;
+        check_evenlist[i] = (NX*t + x)/2;
         i++;
       } else {
-        check_oddlist[j] = (NX/2)*t + x/2;
+        check_oddlist[j] = (NX*t + x)/2;
         j++;
-      }
-    } else 
-    if( field[t][x] == 2+TUP) {
-      if((t+x)%2==0) {
-        check_evenlist[i] = (NX/2)*t + x/2;
-        check_oddlist[j] = (NX/2)*tup[t] + x/2;
-        i++; j++;
-      } else {
-        check_oddlist[j] = (NX/2)*t + x/2;
-        check_evenlist[i] = (NX/2)*tup[t] + x/2;
-        i++; j++;
-      }
-    } else
-    if(field[t][x] == 2+XUP) {
-      if((t+x)%2==0) {
-        check_evenlist[i] = (NX/2)*t + x/2;
-        check_oddlist[j] = (NX/2)*t + xup[x]/2;
-        i++; j++;
-      } else {
-        check_oddlist[j] = (NX/2)*t + x/2;
-        check_evenlist[i] = (NX/2)*t + xup[x]/2;
-        i++; j++;
-      }
-    } else
-    if(field[t][x]==2+NDIRS) {
-      if((t+x)%2==0) {
-        check_evenlist[i] = (NX/2)*t + x/2;
-        i++; //n++;
-      } else {
-        check_oddlist[j] = (NX/2)*t + x/2;
-        j++; //count only once, no n++ here
       }
     }
   }
@@ -1457,29 +1527,48 @@ void check_det(  )
   for(int i=0; i<n; i++){
     for(int j=0; j<n; j++){
       check_Ginv[i*n+j] = Dinv[check_evenlist[i]*VOLUME/2+check_oddlist[j]];
+      check_Ginv_odd[i*n+j] = Dinv[VOLUME/2*VOLUME/2 + check_oddlist[i]*VOLUME/2+check_evenlist[j]];
     }
   }
 
   /* LU */
-  LAPACK_dgetrf( &n, &n, check_Ginv, &n, ipiv, &info ); 
+  LAPACK_dgetrf( &n, &n, check_Ginv, &n, ipiv, &info );
   if( info != 0 ) {
-    fprintf(stderr, "sgetrf returned error %d (zero determinant has been accepted)! \n", info);
-    fprintf(stderr, " Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
-    exit(-1);
+    printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
+    //exit(-1);
   }
-  
+  LAPACK_dgetrf( &n, &n, check_Ginv_odd, &n, ipiv_o, &info );
+  if( info != 0 ) {
+    printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
+   // exit(-1);
+  }
+
   /* determinant from LU ( for debugging ) */
   for(int i=0; i<n; i++) {
-    det *= check_Ginv[i*n+i];
+    if(ipiv[i]==i+1) { det_e *= check_Ginv[i*n+i];}
+    else { det_e *= -check_Ginv[i*n+i]; }
+    if(ipiv_o[i]==i+1) { det_o *= -check_Ginv_odd[i*n+i];}
+    else { det_o *= check_Ginv_odd[i*n+i]; }
   }
+  
  }
 
- double diff =  fabs(det) - fabs(det_save);
- printf("CHECK det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
- if(diff*diff/(det*det)>0.001){
-   fprintf(stderr, " Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",det, det_save, diff, previous_accepted_det);
-   exit(1);
+ //printf( "even %4.3g odd %4.3g  n=%d\n", det_e, det_o, n );
+ double diff =  fabs(det_e*det_o) - det_save;
+#ifdef DEBUG
+ printf("CHECK det %g  accepted %g  diff %g, accepted factor %g \n", det_e*det_o, det_save, diff, previous_accepted_det);
+#endif
+ if(diff/fabs(det_e*det_o)>0.0000001){
+   printf(" Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",det_e*det_o, det_save, diff, previous_accepted_det);
+   //exit(1);
  }
+
+  free(check_Ginv);
+  free(check_Ginv_odd);
+  free(check_evenlist);
+  free(check_oddlist);
 }
 
 /* LAPACK LU loses to cg when L~200 */

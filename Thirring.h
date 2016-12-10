@@ -6,9 +6,13 @@
 #include <time.h>
 #include <sys/time.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846264338327 
+#endif
+
 /* Lattice size and dimensions */
-#define NT 24
-#define NX 24
+#define NT 128
+#define NX 128
 #define ND 2
 #define NDIRS (2*ND)
 
@@ -28,9 +32,11 @@
 #define LINK_XDN (2+XDN)
 #define SOURCE_MONOMER (2+NDIRS)
 
+#define CG_ACCURACY 1e-16
+#define CG_MAX_ITER 10000
 
 /* Maximum number of fluctutaions from the background configuration */
-#define MAX_CHANGES 20
+#define MAX_CHANGES 500
 
 /* Propability of exiting in the monomer moving worm update */
 #define flip_exit_propability 0.2
@@ -38,6 +44,14 @@
 
 /* Functions in vec_ops.c */
 void vec_zero( double a[NT][NX] );
+void vec_one(double a[NT][NX]);
+void vec_gaussian(double a[NT][NX]);
+void vec_add(double a[NT][NX], double b[NT][NX]);
+void vec_d_mul(double a[NT][NX], double d);
+void vec_zero_occupied(double a[NT][NX]);
+double vec_dot(double a[NT][NX], double b[NT][NX]);
 void cg_propagator( double propagator[NT][NX], double source[NT][NX] );
+
 void fM( double chi[NT][NX], double psi[NT][NX] );
+void fM_transpose(double chi[NT][NX], double psi[NT][NX] );
 
