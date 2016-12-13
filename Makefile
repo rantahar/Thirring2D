@@ -1,6 +1,6 @@
 
 CC=gcc 
-CFLAGS=-march=native -Wall -Wextra -std=c99 -O3 -fgcse-after-reload -ffast-math -fassociative-math -freciprocal-math -fno-signed-zeros -funroll-loops -funswitch-loops -llapack -lm
+CFLAGS=-march=native -Wall -Wextra -std=c99 -O3 -llapack -lm
 
 DEPS=Makefile Thirring.h
 

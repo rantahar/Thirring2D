@@ -56,10 +56,10 @@ void vec_dmul_add(double a[NT][NX], double b[NT][NX], double d[NT][NX], double e
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++)  
       a[t][x] = b[t][x] + e * d[t][x] ;
 }
-double vec_dot(double a[NT][NX], double b[NT][NX])
+inline double vec_dot(double a[NT][NX], double b[NT][NX])
 {
   double s = 0 ;
-  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++)  
+  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++)
       s += a[t][x]*b[t][x];
   return( s );
 }

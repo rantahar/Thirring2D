@@ -5,9 +5,9 @@
  * represented as dimers (occupied links). 
  *
  ****************************************************************/
-#ifdef DEBUG
+//#ifdef DEBUG
 #include <fenv.h>
-#endif
+//#endif
 
 #include "Thirring.h"
 
@@ -20,6 +20,8 @@ double m;
 double U;
 double mu;
 
+/* Maximum number of fluctuations from the background configuration */
+int max_changes;
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -243,6 +245,37 @@ void calc_Dinv( )
   
 }
 
+void write_config(){
+  FILE * config_file;
+  char filename[100];
+  sprintf(filename, "config_checkpoint");
+  
+  config_file = fopen(filename,"wb");
+  if (config_file){
+    fwrite(field, VOLUME, sizeof(int), config_file);
+    fclose(config_file);
+  } else {
+    printf("Could not write configuration\n");
+    exit(1);
+  }
+}
+
+
+void read_config(char * filename){
+  FILE * config_file;
+  
+  config_file = fopen(filename,"rb");
+  if (config_file){
+    fread(field, VOLUME, sizeof(int), config_file);
+    fclose(config_file);
+  } else {
+    printf("Could not read configuration\n");
+    exit(1);
+  }
+}
+
+
+
 
 /* Matrices needed for the fluctuation matrix */
 double **BAPe, **PACe, **BGCe, **BAPo, **PACo, **BGCo;
@@ -274,9 +307,8 @@ void update_background( )
      PACo[i] = malloc(VOLUME/2*sizeof(double));
      BGCo[i] = malloc(VOLUME/2*sizeof(double));
    }
-   init=0;
  }
-
+ 
  /* The current configuration becomes the background */
  n_bc_monomers = n_monomers;
  n_bc_links = n_links;
@@ -375,11 +407,11 @@ void update_background( )
  }
 
  //printf( "even %4.3g odd %4.3g  n=%d\n", det_e, det_o, n );
- double diff =  fabs(det_e*det_o) - det_save;
+ double diff =  fabs(fabs(det_e*det_o) - det_save);
 #ifdef DEBUG
  printf("EXACT det %g  accepted %g  diff %g, accepted factor %g \n", det_e*det_o, det_save, diff, previous_accepted_det);
 #endif
- if(diff/(det_e*det_o)>0.0000001){
+ if(init == 0 && diff/(det_e*det_o)>0.0000001){
    printf(" Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",fabs(det_e*det_o), det_save, diff, previous_accepted_det);
    //exit(1);
  }
@@ -439,6 +471,7 @@ void update_background( )
   }
 
   free(B);
+  if(init==1) init = 0;
 }
 
 
@@ -514,10 +547,10 @@ int n_legal_links_after_removing(int t1, int x1, int t2, int x2){
 }
 
 
-int added_evensites[MAX_CHANGES+2];
-int added_oddsites[MAX_CHANGES+2];
-int removed_evenlist[MAX_CHANGES+2];
-int removed_oddlist[MAX_CHANGES+2];
+int added_evensites[VOLUME/2];
+int added_oddsites[VOLUME/2];
+int removed_evenlist[VOLUME/2];
+int removed_oddlist[VOLUME/2];
 int n_added_even=0,n_added_odd=0,n_removed_even=0,n_removed_odd=0;
 
 void new_link(int t, int x, int nu){
@@ -553,7 +586,7 @@ void new_link(int t, int x, int nu){
   }
   
   update_linklists();
-  if( n_added_even == MAX_CHANGES || n_added_odd == MAX_CHANGES  ){
+  if( n_added_even == max_changes || n_added_odd == max_changes  ){
     update_background();
     n_removed_even=n_removed_odd=0;
     n_added_even=n_added_odd=0;
@@ -592,7 +625,7 @@ void new_monomer(int t1, int x1, int t2, int x2){
   }
 
   update_linklists();
-  if( n_added_even == MAX_CHANGES || n_added_odd == MAX_CHANGES  ){
+  if( n_added_even == max_changes || n_added_odd == max_changes  ){
     update_background();
     n_removed_even=n_removed_odd=0;
     n_added_even=n_added_odd=0;
@@ -636,7 +669,7 @@ void removed_link(int t, int x, int nu){
   printf(" indexes %d %d %d %d \n",n_added_even,n_added_odd,n_removed_even,n_removed_odd);
 #endif
   update_linklists();
-  if( n_removed_even == MAX_CHANGES || n_removed_odd == MAX_CHANGES ){
+  if( n_removed_even == max_changes || n_removed_odd == max_changes ){
     update_background();
     n_removed_even=n_removed_odd=0;
     n_added_even=n_added_odd=0;
@@ -678,7 +711,7 @@ void removed_monomer(int t1, int x1, int nu){
   printf(" indexes %d %d %d %d \n",n_added_even,n_added_odd,n_removed_even,n_removed_odd);
 #endif
   update_linklists();
-  if(n_removed_even == MAX_CHANGES || n_removed_odd == MAX_CHANGES ){
+  if(n_removed_even == max_changes || n_removed_odd == max_changes ){
     update_background();
     n_removed_even=n_removed_odd=0;
     n_added_even=n_added_odd=0;
@@ -1099,11 +1132,13 @@ void measure_propagator(){
   }
 
   double source[NX][NT], propagator[NT][NX];
-  vec_zero( source );
+  vec_zero( source ); 
 
-  for( int t1=0;t1<NT;t1++) for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 )
+  //int t1=1;
+  for( int t1=0;t1<1;t1++) for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 )
   {
     source[t1][x1] = 1;
+    vec_zero( propagator );
     cg_propagator(propagator,source);
     
     for( int t2=0; t2<NT; t2++)
@@ -1116,7 +1151,8 @@ void measure_propagator(){
   }
   
   for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, det_sign*prop[t2]/(VOLUME) );
-  for( int t1=0;t1<NT;t1++)  printf("Current %d %g\n", t1, det_sign*j[t1]/(2*NX) );
+  //for( int t1=0;t1<NT;t1++)
+  printf("Current %d %g\n", 1, det_sign*j[1]/(2*NX) );
 }
 
 
@@ -1243,8 +1279,8 @@ void measure_susceptibility(){
           //print_config();
           //check_det();
           #endif
-          if(n_added_even == MAX_CHANGES || n_added_odd == MAX_CHANGES ||
-             n_removed_even == MAX_CHANGES || n_removed_odd == MAX_CHANGES ){
+          if(n_added_even == max_changes || n_added_odd == max_changes ||
+             n_removed_even == max_changes || n_removed_odd == max_changes ){
             update_background();
             n_removed_even=n_removed_odd=0;
             n_added_even=n_added_odd=0;
@@ -1326,9 +1362,9 @@ void measure()
  */
 int main(int argc, char* argv[])
 {
-  #ifdef DEBUG
+  //#ifdef DEBUG
   feenableexcept(FE_INVALID | FE_OVERFLOW);
-  #endif 
+  //#endif 
 
   int i,n_loops,n_measure,n_thermalize;
   long seed;
@@ -1353,9 +1389,17 @@ int main(int argc, char* argv[])
   printf(" mu : ");
   scanf("%lf",&mu);
 
+  printf(" maximum size of fluctuation matrix : ");
+  scanf("%d",&max_changes);
+
   printf(" Random number : ");
   scanf("%ld",&seed);
   seed_mersenne( seed );
+
+  char start_config[100];
+  printf(" Start configuration : ");
+  scanf("%s",&start_config);
+
 
   /* "Warm up" the rng generator */
   for (i=0; i<543210; i++) mersenne();
@@ -1366,7 +1410,19 @@ int main(int argc, char* argv[])
   printf(" m %f \n", m);
   printf(" U %f \n", U);
   printf(" mu %f \n", mu);
+  printf(" Size of fluctuation matrix %d\n", max_changes );
   printf(" Random seed %ld\n", seed );
+  printf(" Start configuration %s\n", start_config );
+
+  if(strcmp(start_config,"cold")==0){
+    printf(" Starting from a cold configuration\n" );
+    for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
+      field[t][x] = 0;
+    }
+  } else {
+    printf(" Reading configuration file\n" );
+    read_config(start_config);
+  }
 
 
   /* allocate propagator and lists */
@@ -1415,20 +1471,17 @@ int main(int argc, char* argv[])
   }
 
   
-  /* fill monomers and links */
-  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
-    field[t][x] = 0;
-  }
-  update_linklists();
-
   /* calculate propagators */
   calc_Dinv( );
-  update_background( );
-  
-  /* and the update/measure loop */
   int changes = 0;
   struct timeval start, end;
   gettimeofday(&start,NULL);
+
+  /* Background and fluctuation matrix */
+  update_linklists();
+  update_background( );
+  
+  /* and the update/measure loop */
   for (i=1; i<n_loops+1; i++) {
 
     /* Update */
@@ -1451,6 +1504,9 @@ int main(int argc, char* argv[])
       printf("LINKS %d \n", det_sign*n_links);
       printf("Determinant %g \n", det_sign*det_save);
       printf("Sign %d \n", det_sign);
+
+      /* Write configuration */
+      write_config();
 
       gettimeofday(&start,NULL);
 
