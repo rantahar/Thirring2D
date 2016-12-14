@@ -11,8 +11,8 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 64
-#define NX 64
+#define NT 128
+#define NX 128
 #define ND 2
 #define NDIRS (2*ND)
 

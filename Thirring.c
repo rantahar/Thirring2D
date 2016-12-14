@@ -214,7 +214,8 @@ void calc_Dinv( )
         M[i2*n + i1] = fM_index( t1, x1, t2, x2 );
       }
     }
-
+   
+    gettimeofday(&start,NULL);
     // LU decompose
     LAPACK_dgetrf( &n, &n, M, &n, ipiv, &info );
     if( info != 0 ) {
@@ -279,6 +280,7 @@ void read_config(char * filename){
 
 /* Matrices needed for the fluctuation matrix */
 double **BAPe, **PACe, **BGCe, **BAPo, **PACo, **BGCo;
+int *newsite, **new_combination;
 
 /* Invert the matrix of propagators between occupied sites
  * Assing the current configuration as the background
@@ -292,6 +294,7 @@ void update_background( )
 {
 
  static int init = 1;
+ static double *B,*C;
  if(init==1){
    BAPe = malloc(VOLUME/2*sizeof(double*));
    PACe = malloc(VOLUME/2*sizeof(double*));
@@ -299,6 +302,7 @@ void update_background( )
    BAPo = malloc(VOLUME/2*sizeof(double*));
    PACo = malloc(VOLUME/2*sizeof(double*));
    BGCo = malloc(VOLUME/2*sizeof(double*));
+   new_combination = malloc( sizeof(int*)*VOLUME/2 );
    for(int i=0; i<VOLUME/2; i++){
      BAPe[i] = malloc(VOLUME/2*sizeof(double));
      PACe[i] = malloc(VOLUME/2*sizeof(double));
@@ -306,7 +310,12 @@ void update_background( )
      BAPo[i] = malloc(VOLUME/2*sizeof(double));
      PACo[i] = malloc(VOLUME/2*sizeof(double));
      BGCo[i] = malloc(VOLUME/2*sizeof(double));
+     new_combination[i] = malloc( sizeof(int)*VOLUME/2 );
    }
+   
+   B = malloc( sizeof(double)*VOLUME*VOLUME/4 );
+   C = malloc( sizeof(double)*VOLUME*VOLUME/4 );
+   newsite = malloc( sizeof(int)*VOLUME );
  }
  
  /* The current configuration becomes the background */
@@ -318,6 +327,9 @@ void update_background( )
  int m = VOLUME/2 - n;
  double *Ginv_odd = Ginv+n*n;
  double *Dinv_odd = Dinv+VOLUME*VOLUME/4;
+
+ struct timeval start, end;
+ gettimeofday(&start,NULL);
 
  /*If no occupied sites, determinant of rank 0 is 1 */
  if( n > 0 ){
@@ -364,14 +376,18 @@ void update_background( )
   LAPACK_dgetrf( &n, &n, Ginv, &n, ipiv, &info );
   if( info != 0 ) {
     printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
-    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
-    //exit(-1);
+#ifdef DEBUG
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det);
+#endif
+    exit(-1);
   }
   LAPACK_dgetrf( &n, &n, Ginv_odd, &n, ipiv_o, &info );
   if( info != 0 ) {
     printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
-    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
-    //exit(-1);
+#ifdef DEBUG
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det);
+#endif
+    exit(-1);
   }
 
   /* determinant from LU ( for debugging ) */
@@ -407,70 +423,30 @@ void update_background( )
  }
 
  //printf( "even %4.3g odd %4.3g  n=%d\n", det_e, det_o, n );
- double diff =  fabs(fabs(det_e*det_o) - det_save);
 #ifdef DEBUG
- printf("EXACT det %g  accepted %g  diff %g, accepted factor %g \n", det_e*det_o, det_save, diff, previous_accepted_det);
+  double det_diff =  fabs(fabs(det_e*det_o) - det_save);
+  printf("EXACT %g %g det %g  accepted %g  diff %g, accepted factor %g \n", det_e, det_o, det_e*det_o, det_save, det_diff, previous_accepted_det);
+  if(init == 0 && det_diff/(det_e*det_o)>0.0000001){
+    printf(" Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",fabs(det_e*det_o), det_save, det_diff, previous_accepted_det);
+    exit(1);
+  }
 #endif
- if(init == 0 && diff/(det_e*det_o)>0.0000001){
-   printf(" Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",fabs(det_e*det_o), det_save, diff, previous_accepted_det);
-   //exit(1);
- }
- det_save = fabs(det_e*det_o);
- previous_accepted_det = previous_det = 1;
- previous_sign = det_sign = 1-2*(det_e*det_o<0);
+  previous_accepted_det = previous_det = 1;
+  //previous_sign = det_sign = 1-2*(det_e*det_o<0);
+#ifdef DEBUG
+  det_save = fabs(det_e*det_o);
+#endif
+
+  gettimeofday(&end,NULL);
+  double diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
+  printf("Inverted propagator matrices in %.3g seconds\n", 1e-6*diff);
+
+  /* Mark fluctutation matrix at all sites as not calculated */
+  for( int a=0; a<VOLUME; a++ ) newsite[a] = 1;
+  for( int a=0; a<VOLUME/2; a++ ) for( int b=0; b<VOLUME/2; b++ ) 
+    new_combination[a][b] = 1;
 
 
-  /* Construct the entries of the fluctuation matrix */
-  /* Even to odd */
-  double *B;
-  B = malloc( sizeof(double)*VOLUME*VOLUME/4 );
-  for( int a=0; a<VOLUME/2; a++ ) for( int k=0; k<n; k++)
-    B[a*VOLUME/2+k] = Dinv[evenlist[k]*VOLUME/2+a];
-  for( int a=0; a<VOLUME/2; a++) for( int b=0; b<n; b++)
-  { 
-    PACe[a][b] = 0;
-    for( int k=0; k<n; k++) PACe[a][b] -= Ginv[b*n+k]*B[a*VOLUME/2+k];
-  }
-
-  for( int a=0; a<VOLUME/2; a++ ) for( int l=0; l<n; l++)
-    B[a*VOLUME/2+l] = Dinv[a*VOLUME/2+oddlist[l]];
-  for( int a=0; a<n; a++) for( int b=0; b<VOLUME/2; b++)
-  { 
-    BAPe[a][b] = 0;
-    for( int l=0; l<n; l++) BAPe[a][b] += B[b*VOLUME/2+l]*Ginv[l*n+a];
-  }
-
-  for( int b=0; b<VOLUME/2; b++) for( int a=0; a<VOLUME/2; a++){
-    BGCe[b][a] = 0;
-    for( int l=0; l<n; l++)
-      BGCe[b][a] += B[b*VOLUME/2+l]*PACe[a][l];
-    BGCe[b][a] = Dinv[b*VOLUME/2+a] + BGCe[b][a];
-  }
-
-  /* Odd to even */
-  for( int a=0; a<VOLUME/2; a++ ) for( int k=0; k<n; k++)
-    B[a*VOLUME/2+k] = Dinv_odd[oddlist[k]*VOLUME/2+a];
-  for( int a=0; a<VOLUME/2; a++) for( int b=0; b<n; b++)
-  { 
-    PACo[a][b] = 0;
-    for( int l=0; l<n; l++) PACo[a][b] -= Ginv_odd[b*n+l]*B[a*VOLUME/2+l];
-  }
-  for( int a=0; a<VOLUME/2; a++ ) for( int l=0; l<n; l++)
-    B[a*VOLUME/2+l] = Dinv_odd[a*VOLUME/2+evenlist[l]];
-  for( int a=0; a<n; a++) for( int b=0; b<VOLUME/2; b++)
-  { 
-    BAPo[a][b] = 0;
-    for( int l=0; l<n; l++) BAPo[a][b] += B[b*VOLUME/2+l]*Ginv_odd[l*n+a];
-  }
-
-  for( int b=0; b<VOLUME/2; b++) for( int a=0; a<VOLUME/2; a++){
-    BGCo[b][a] = 0;
-    for( int l=0; l<n; l++)
-      BGCo[b][a] += B[b*VOLUME/2+l]*PACo[a][l];
-    BGCo[b][a] = Dinv_odd[b*VOLUME/2+a] + BGCo[b][a];
-  }
-
-  free(B);
   if(init==1) init = 0;
 }
 
@@ -555,7 +531,9 @@ int n_added_even=0,n_added_odd=0,n_removed_even=0,n_removed_odd=0;
 
 void new_link(int t, int x, int nu){
   link_on(t,x,nu);
+#ifdef DEBUG
   det_save = det_save*previous_det/previous_accepted_det;
+#endif
   previous_accepted_det = previous_det;
   det_sign = previous_sign;
 
@@ -595,7 +573,9 @@ void new_link(int t, int x, int nu){
 void new_monomer(int t1, int x1, int t2, int x2){
   n_monomers += 2;
   monomer_on(t1,x1,t2,x2);
+#ifdef DEBUG
   det_save = det_save*previous_det/previous_accepted_det;
+#endif
   previous_accepted_det = previous_det;
   det_sign = previous_sign;
 
@@ -634,7 +614,9 @@ void new_monomer(int t1, int x1, int t2, int x2){
 void removed_link(int t, int x, int nu){
   n_links -= 1;
   link_off(t,x,nu);
+#ifdef DEBUG
   det_save = det_save*previous_det/previous_accepted_det;
+#endif
   previous_accepted_det = previous_det;
   det_sign = previous_sign;
 
@@ -679,7 +661,9 @@ void removed_monomer(int t1, int x1, int nu){
   n_monomers -= 2;
   link_off(t1,x1,nu);
   int t2 = tdir(t1,nu), x2=xdir(x1,nu);
+#ifdef DEBUG
   det_save = det_save*previous_det/previous_accepted_det;
+#endif
   previous_accepted_det = previous_det;
   det_sign = previous_sign;
 
@@ -733,6 +717,54 @@ double extended_determinant( int me, int mo, int re, int ro ){
 
   if(mr==0) return 1;
 
+  /* Construct new parts of the fluctuation matrix */
+  double *Dinv_odd = Dinv+VOLUME*VOLUME/4;
+  double *Ginv_odd = Ginv+n*n;
+  for( int b=0; b<me; b++) if( newsite[added_evensites[b]] == 1 ){
+    for( int a=0; a<n; a++)
+    { 
+      double sum = 0;
+      for( int l=0; l<n; l++) sum += Ginv_odd[a*n+l]*Dinv_odd[oddlist[l]*VOLUME/2+added_evensites[b]];
+      PACo[added_evensites[b]][a] = -sum;
+      
+      sum=0;
+      for( int l=0; l<n; l++) sum += Dinv[added_evensites[b]*VOLUME/2+oddlist[l]]*Ginv[l*n+a];
+      BAPe[a][added_evensites[b]] = sum;
+    }
+    newsite[added_evensites[b]] = 0;
+  }
+
+  for( int a=0; a<mo; a++) if( newsite[VOLUME/2+added_oddsites[a]] == 1 ){
+    for( int b=0; b<n; b++)  { 
+      double sum = 0;
+      for( int k=0; k<n; k++) sum += Ginv[b*n+k]*Dinv[evenlist[k]*VOLUME/2+added_oddsites[a]];
+      PACe[added_oddsites[a]][b] = -sum;
+
+      sum = 0;
+      for( int l=0; l<n; l++)  sum += Dinv_odd[added_oddsites[a]*VOLUME/2+evenlist[l]]*Ginv_odd[l*n+b];
+      BAPo[b][added_oddsites[a]] = sum;
+    }
+    newsite[VOLUME/2+added_oddsites[a]] = 0;
+  }
+
+
+  for( int b=0; b<me; b++) for( int a=0; a<mo; a++) 
+  if( new_combination[added_evensites[b]][added_oddsites[a]] == 1 )
+  {
+    double sum = 0;
+    for( int l=0; l<n; l++)
+      sum += Dinv[added_evensites[b]*VOLUME/2+oddlist[l]]*PACe[added_oddsites[a]][l];
+    BGCe[added_evensites[b]][added_oddsites[a]] = Dinv[added_evensites[b]*VOLUME/2+added_oddsites[a]] + sum;
+
+    sum=0;
+    for( int l=0; l<n; l++) 
+      sum += Dinv_odd[added_oddsites[a]*VOLUME/2+evenlist[l]]*PACo[added_evensites[b]][l];
+    BGCo[added_oddsites[a]][added_evensites[b]] = Dinv_odd[added_oddsites[a]*VOLUME/2+added_evensites[b]] + sum;
+
+    new_combination[added_evensites[b]][added_oddsites[a]] = 0;
+  }
+
+
 
   /* Even to odd */
   double *F;
@@ -752,7 +784,6 @@ double extended_determinant( int me, int mo, int re, int ro ){
   int ipiv[mr], info;
   LAPACK_dgetrf( &mr, &mr, F, &mr, ipiv, &info );
   for( int a=0; a<mr; a++) det *= F[a*mr+a];
-
 
   /* Odd to even */
   for( int b=0; b<re; b++) for( int a=0; a<ro; a++)
@@ -1166,7 +1197,7 @@ void measure_propagator(){
 void measure_susceptibility(){
  int n = n_bc_monomers/2 + n_bc_links;
  int steps = 0;
- int n_attempts=100;
+ int n_attempts=1000;
  int meas_sign = det_sign;
 
  /* Do multiple attemps, these are cheap and the result is usually 0 */
@@ -1189,6 +1220,7 @@ void measure_susceptibility(){
    for(;; steps++ ){
      //print_config();
      //printf("measure_susceptibility: At site (%d,%d), field %d\n",t2,x2,field[t2][x2]);
+     if(steps%1000==0) printf("Step number %d\n",steps);
      /* Now we are at (t2,x2), and the link is off. Try to move. */
      int dir = NDIRS*mersenne();
      int t3 = tdir(t2,dir), x3 = xdir(x2,dir);
@@ -1247,6 +1279,8 @@ void measure_susceptibility(){
         double det;
         det = det_moved_monomer( t2, x2, t4, x4 );
         
+        //printf("determinant ratio %g %g %d\n",det,previous_accepted_det,zeroes);
+
         if( mersenne() < det ){
           /* Accepted */
           int s = (t2*NT+x2)/2;
@@ -1271,13 +1305,15 @@ void measure_susceptibility(){
 
           field[t2][x2] = 0; field[t4][x4] = SOURCE_MONOMER;
           t2 = t4; x2 = x4;
+#ifdef DEBUG
           det_save = det_save*previous_det/previous_accepted_det;
+#endif
           previous_accepted_det = previous_det;
           //det_sign = previous_sign;
 
           #ifdef DEBUG
           //print_config();
-          //check_det();
+          check_det();
           #endif
           if(n_added_even == max_changes || n_added_odd == max_changes ||
              n_removed_even == max_changes || n_removed_odd == max_changes ){
@@ -1346,7 +1382,7 @@ void measure()
   //print_config();
 #endif
 
-  measure_propagator();
+  //measure_propagator();
   measure_susceptibility();
 
   measurement++;
@@ -1502,7 +1538,9 @@ int main(int argc, char* argv[])
       /* Statistics */
       printf("MONOMERS %d \n", det_sign*n_monomers);
       printf("LINKS %d \n", det_sign*n_links);
+      #ifdef DEBUG
       printf("Determinant %g \n", det_sign*det_save);
+      #endif DEBUG
       printf("Sign %d \n", det_sign);
 
       /* Write configuration */
@@ -1591,14 +1629,18 @@ void check_det(  )
   LAPACK_dgetrf( &n, &n, check_Ginv, &n, ipiv, &info );
   if( info != 0 ) {
     printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
+#ifdef DEBUG
     printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
-    //exit(-1);
+#endif
+    exit(-1);
   }
   LAPACK_dgetrf( &n, &n, check_Ginv_odd, &n, ipiv_o, &info );
   if( info != 0 ) {
     printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
+#ifdef DEBUG
     printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
-   // exit(-1);
+#endif
+    exit(-1);
   }
 
   /* determinant from LU ( for debugging ) */
@@ -1612,14 +1654,14 @@ void check_det(  )
  }
 
  //printf( "even %4.3g odd %4.3g  n=%d\n", det_e, det_o, n );
- double diff =  fabs(det_e*det_o) - det_save;
+ double diff =  fabs(fabs(det_e*det_o) - det_save);
 #ifdef DEBUG
  printf("CHECK det %g  accepted %g  diff %g, accepted factor %g \n", det_e*det_o, det_save, diff, previous_accepted_det);
-#endif
  if(diff/fabs(det_e*det_o)>0.0000001){
-   printf(" Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",det_e*det_o, det_save, diff, previous_accepted_det);
-   //exit(1);
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
+   exit(1);
  }
+#endif
 
   free(check_Ginv);
   free(check_Ginv_odd);
