@@ -28,6 +28,8 @@ int field[NT][NX];
 int n_bc_monomers;  //Numbers of links and monomers in the background
 int n_bc_links;
 
+/* Pseudofermion fields */
+double *psi,*chi;
 
 /* Neighbour index arrays, to be filled at the beginning
  */
@@ -233,19 +235,19 @@ int add_link()
     int t2,x2;
     t2 = tdir(t,nu); x2 = xdir(x,nu);
 
-
     double S1,S2, edS=0;
-    double tv[NT][NX],psi[NT][NX],chi[NT][NX];
     vec_gaussian(psi);
-    fM_transpose( chi, psi ); //Now chi is from correct distribution
-    S1 = 0.5*vec_dot(psi,psi);
+    fM_occupied( chi, psi ); //Now chi is from correct distribution
+    S1 = action(psi);
 
     monomer_on(t,x,t2,x2); //make suggested change
-    vec_zero(tv);
-    cg_MdM( tv, chi );
-    fM( psi, tv );
-    S2 = 0.5*vec_dot(psi,psi);
+    if( cg_MdM_occupied( psi, chi ) ==0 ){
+      S2 = action(psi);
+    } else {
+      S2 = 1e200; //Unable to invert, zero mode
+    }
     edS = exp(S1-S2);
+    //printf(" action %g %g %g\n",S1,S2,edS);
     link_off(t,x,nu); //change back
     
     /* Calculate the determinant fraction */
@@ -285,17 +287,18 @@ int remove_link()
       int t2,x2;
       t2 = tdir(t,nu); x2 = xdir(x,nu);
 
-      double psi[NT][NX],tv[NT][NX],chi[NT][NX], S1,S2,edS=0;
+      double S1,S2,edS=0;
       vec_gaussian(psi);
-      fM_transpose( chi, psi );//Now chi is from correct distribution
-      S1 = 0.5*vec_dot(psi,psi);
+      fM_occupied( chi, psi );//Now chi is from correct distribution
+      S1 = action(psi);
 
       int f1=field[t][x], f2=field[t2][x2];
       field[t][x] = 0; field[t2][x2] = 0; //make suggested change
-      vec_zero(tv);
-      cg_MdM( tv, chi );
-      fM( psi, tv );
-      S2 = 0.5*vec_dot(psi,psi);
+      if( cg_MdM_occupied( psi, chi ) ==0 ){
+        S2 = action(psi);
+      } else {
+        S2 = 1e200; //Unable to invert, zero mode
+      }
       edS = exp(S1-S2);
       field[t][x] = f1; field[t2][x2] = f2; //back
 
@@ -316,19 +319,18 @@ int remove_link()
       int t2,x2;
       t2 = tdir(t,nu); x2 = xdir(x,nu);
 
-      double psi[NT][NX],tv[NT][NX],chi[NT][NX], S1,S2,edS=0;
+      double S1,S2,edS=0;
       vec_gaussian(psi);
-      fM_transpose( chi, psi );//Now chi is from correct distribution
-      vec_zero(tv);
-      cg_MdM( tv, chi );
-      fM( psi, tv );
-      S1 = 0.5*vec_dot(psi,psi);
+      fM_occupied( chi, psi );//Now chi is from correct distribution
+      S1 = action(psi);
 
       int f1=field[t][x], f2=field[t2][x2];
       field[t][x] = 0; field[t2][x2] = 0; //make suggested change
-      cg_MdM( tv, chi );
-      fM( psi, tv );
-      S2 = 0.5*vec_dot(psi,psi);
+      if( cg_MdM_occupied( psi, chi ) ==0 ){
+        S2 = action(psi);
+      } else {
+        S2 = 1e200; //Unable to invert, zero mode
+      }
       edS = exp(S1-S2);
       field[t][x] = f1; field[t2][x2] = f2; //back
 
@@ -478,15 +480,17 @@ void measure_susceptibility(){
         /* Check for the chosen sites in added and removed lists */
         int s = (t2*NX+x2)/2;
 
-        double psi[NT][NX],tv[NT][NX],chi[NT][NX], S1,S2, edS;
+        double S1,S2, edS;
         vec_gaussian(psi);
-        fM_transpose( chi, psi ); //Now chi is from correct distribution
-        S1 = 0.5*vec_dot(psi,psi);
+        fM_occupied( chi, psi ); //Now chi is from correct distribution
+        S1 = action(psi);
 
         field[t2][x2] = 0; field[t4][x4] = SOURCE_MONOMER; //make suggested change
-        cg_MdM( tv, chi );
-        fM( psi, tv );
-        S2 = 0.5*vec_dot(psi,psi);
+        if( cg_MdM_occupied( psi, chi ) == 0 ){
+          S2 = action(psi);
+        } else {
+          S2 = 1e200; //Unable to invert, zero mode
+        }
         edS = exp(S1-S2);
         field[t2][x2] = SOURCE_MONOMER; field[t4][x4] = 0; //back
 
@@ -539,7 +543,7 @@ void measure()
   //print_config();
 #endif
 
-  measure_propagator();
+  //measure_propagator();
   measure_susceptibility();
 
   measurement++;
@@ -631,6 +635,9 @@ int main(int argc, char* argv[])
       eta[t][x][1] = -1;
     }
   }
+
+  psi =  alloc_field();
+  chi =  alloc_field();
 
   
   /* fill monomers and links */
