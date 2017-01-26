@@ -125,7 +125,7 @@ double fM_index( int t1, int x1, int t2, int x2 )
 {
   if(t1==t2 ){ 
     if( x2 == xup[x1] || x2 == xdn[x1] ) {
-#if NX==2 
+#if NX==2
       if (x2>x1) { return eta[t1][x1][1] ; }
       else { return -eta[t1][x1][1] ; }
 #else
@@ -138,17 +138,14 @@ double fM_index( int t1, int x1, int t2, int x2 )
   else if ( x1==x2  ) {
     if( t2 == tup[t1] ){
 #if NT==2
-      if (t2>t1) { return eta[t1][x1][0] ; }
-      else { return -eta[t1][x1][0] ; }
+      if (t2>t1) { return (exp(mu)+exp(-mu))*eta[t1][x1][0] ; }
+      else { return -(exp(mu)+exp(-mu))*eta[t1][x1][0] ; }
 #else
       if (t2>t1) { return 0.5*exp(mu)*eta[t1][x1][0] ; }
       else { return -0.5*exp(mu)*eta[t1][x1][0] ; }
 #endif
     } else if ( t2 == tdn[t1] ) {
-#if NT==2
-      if (t2>t1) { return eta[t1][x1][0] ; }
-      else { return -eta[t1][x1][0] ; }
-#else
+#if NT>2
       if (t2>t1) { return 0.5*exp(-mu)*eta[t1][x1][0] ; }
       else { return -0.5*exp(-mu)*eta[t1][x1][0] ; }
 #endif
@@ -203,6 +200,11 @@ void calc_Dinv( )
       printf("calc_Dinv: sgetrf returned an error %d! \n", info);
       exit(-1);
     }
+    double det = 0;
+    for(int i=0; i<n; i++) {
+      det += log(fabs(M[i*n+i]));
+    }
+
     LAPACK_dgetri(&n, M, &n, ipiv, work, &lwork, &info);
     if( info != 0 ) {
       printf("calc_Dinv: sgetri returned an error %d! \n", info);
@@ -227,6 +229,11 @@ void calc_Dinv( )
       printf("calc_Dinv: sgetrf returned an error %d! \n", info);
       exit(-1);
     }
+
+    for(int i=0; i<n; i++) {
+      det += log(fabs(M[i*n+i]));
+    } 
+
     LAPACK_dgetri(&n, M, &n, ipiv, work, &lwork, &info);
     if( info != 0 ) {
       printf("calc_Dinv: sgetri returned an error %d! \n", info);
@@ -238,10 +245,26 @@ void calc_Dinv( )
     free(work);
     free(M);
 
+    int x=1,t=0; 
+    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
+    x=0,t=1;
+    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
+    x=0,t=3;
+    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
+    x=0,t=5;
+    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
+    x=0,t=NT-1;
+    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
+    x=0,t=NT-3;
+    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  ); 
+    x=0,t=NT-5;
+    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
+
     gettimeofday(&end,NULL);
     int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
 
     printf("Inverted fermion matrix in %.3g seconds\n", 1e-6*diff);
+    printf(" LOGDETD %g \n", det/NT );
     Dinv_file = fopen(filename,"wb");
     if (Dinv_file){
       fwrite(Dinv, VOLUME*VOLUME/2, sizeof(double), Dinv_file);
@@ -254,7 +277,7 @@ void calc_Dinv( )
 void write_config(){
   FILE * config_file;
   char filename[100];
-  sprintf(filename, "config_checkpoint");
+  sprintf(filename, "config_checkpoint_T%dX%d_U%.6gm%.6gmu%.6g",NT,NX,U,m,mu);
 
   int * buffer = malloc(NX*NT*sizeof(int));
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) 
@@ -1172,8 +1195,7 @@ int update()
 
 /* Propagator
  */
-void measure_propagator(){
-  
+void measure_propagator(){ 
   double prop[NT];
   double j[NT];
   for( int t1=0; t1<NT; t1++){
@@ -1183,33 +1205,36 @@ void measure_propagator(){
   double **source, **propagator;
   source = alloc_vector();
   propagator = alloc_vector();
-  vec_zero( source );
+  //vec_zero( source );
 
   //int t1=1;
-  for( int t1=0;t1<NT;t1++) for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ){
-      source[t1][x1] = 1;
+  for( int t1=0;t1<NT;t1++) /* for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ) */ {
+      vec_zero( source );
+      for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ) source[t1][x1] = (mersenne()>0.5) ? -1:1 ;
 
       vec_zero( propagator );
       cg_propagator(propagator,source);
 
-    //for( int t1=0;t1<1;t1++)
-    //for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ) {
-      //source[t1][x1] = 1;
-      //vec_zero( propagator );
-      //cg_propagator(propagator,source);
-    
-      for( int t2=0; t2<NT; t2++)
+      /*if( t1==0 && x1==0 ){
+        printf("Dinv %g\n",propagator[0][1]);
+        printf("Dinv %g\n",propagator[1][0]);
+        printf("Dinv %g\n",propagator[3][0]);
+        //printf("Dinv %g\n",propagator[5][0]);
+      }*/
+
+      for( int x1=0;x1<NX;x1++) for( int t2=0; t2<NT; t2++)
         prop[(t2-t1+NT)%NT] += propagator[t2][x1];
 
-      j[t1] += eta[t1][x1][0]*propagator[tup[t1]][x1];
-      j[tdn[t1]] += eta[tdn[t1]][x1][0]*propagator[tdn[t1]][x1];
-    //}
-      source[t1][x1] = 0;
+      for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 )
+        j[t1] += exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
+      for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ) 
+        j[tdn[t1]] += exp(-mu)* eta[tdn[t1]][x1][0]*propagator[tdn[t1]][x1];
+      //source[t1][x1] = 0;
   }
   
   for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, det_sign*prop[t2]/(VOLUME) );
   for( int t1=0;t1<NT;t1++)
-    printf("Current %d %g\n", t1, det_sign*j[t1]/(2*NX) );
+    printf("Charge %d %g\n", t1, det_sign*j[t1]/2 );
 
   free_vector(source);
   free_vector(propagator);
@@ -1226,7 +1251,7 @@ void measure_propagator(){
 void measure_susceptibility(){
  int n = n_bc_monomers/2 + n_bc_links;
  int steps = 0;
- int n_attempts=10;
+ int n_attempts=100;
  int meas_sign = det_sign;
 
  /* Do multiple attemps, these are cheap and the result is usually 0 */
@@ -1419,7 +1444,7 @@ void measure()
   //print_config();
 #endif
 
-  //measure_propagator();
+  measure_propagator();
   measure_susceptibility();
 
   measurement++;
@@ -1574,6 +1599,17 @@ int main(int argc, char* argv[])
   update_linklists();
   update_background( );
 
+/*
+  double detratio= det_added_link( 0, 0, 0, 1);
+
+  printf(" %g ",detratio);
+
+  new_link(0 , 0, 1);
+
+  detratio= det_added_link( 1, 2, 1, 3);
+
+  printf(" %g ",detratio);
+*/
 
 /*  print_config();
   int t2 = 63, x2 = 18;
@@ -1614,7 +1650,7 @@ int main(int argc, char* argv[])
       printf("Sign %d \n", det_sign);
 
       /* Write configuration */
-      //write_config();
+      write_config();
 
       gettimeofday(&start,NULL);
 

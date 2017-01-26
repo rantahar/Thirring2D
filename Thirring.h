@@ -11,8 +11,8 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 48
-#define NX 48
+#define NT 8
+#define NX 4
 #define ND 2
 #define NDIRS (2*ND)
 
@@ -32,7 +32,7 @@
 #define LINK_XDN (2+XDN)
 #define SOURCE_MONOMER (2+NDIRS)
 
-#define CG_ACCURACY 1e-16
+#define CG_ACCURACY 1e-20
 #define CG_MAX_ITER 10000
 
 /* Propability of exiting in the monomer moving worm update */

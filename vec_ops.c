@@ -99,6 +99,7 @@ void fM(double **chi, double **psi )
   if(init){
     expmu = exp(mu);
     expmmu = exp(-mu);
+    init = 0;
   }
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
     chi[t][x] = 0;
@@ -136,6 +137,7 @@ void fM_transpose(double **chi, double **psi)
   if(init){
     expmu = exp(mu);
     expmmu = exp(-mu);
+    init = 0;
   }
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
     chi[t][x] = 0;
@@ -166,6 +168,10 @@ void fM_transpose(double **chi, double **psi)
   }
 }
 
+double * alloc_field(){
+  double * a = malloc(VOLUME*sizeof(double*));
+  return a;
+}
 
 
 
@@ -193,8 +199,8 @@ void cg_MdM( double **inv, double **source )
   int k;
   for( k = 1; k < CG_MAX_ITER; k++ )
   {
-    fM_transpose( Mp, p );
-    fM( MMp, Mp );
+    fM( Mp, p );
+    fM_transpose( MMp, Mp );
     pMp = vec_dot( p, MMp ) ;
     a = rr_old / pMp ;
     vec_dmul_add( inv, inv, p, a );
@@ -219,7 +225,7 @@ void cg_MdM( double **inv, double **source )
   free_vector(p);
   free_vector(Mp);
   free_vector(MMp);
-  //printf("CG: %d  %g %g %g %g\n",k,rr,rr_old,pMp,a);
+  //printf("CG: %d %g %g %g %g\n",k,rr/rr_init,rr_init,pMp,a);
 }
 
 
@@ -231,7 +237,9 @@ void cg_propagator( double **propagator, double **source )
 
   fM_transpose( tmp, source );
   cg_MdM( propagator, tmp );
-  fM( tmp, propagator );
+  //fM( tmp, propagator ); //To test cg
+  //vec_dmul_add( tmp, tmp, source, -1 );
+  //printf(" test CG %g \n", vec_dot( tmp, tmp ));
   free_vector(tmp);
 }
 
@@ -256,11 +264,6 @@ void cg_propagator( double **propagator, double **source )
 /* The fermion matrix used in the bozonized version of 
  * the fermion determinant
  */
-double * alloc_field(){
-  double * a = malloc(VOLUME*sizeof(double*));
-  return a;
-}
-
 
 void fM_occupied(double *chi, double *psi )
 {
