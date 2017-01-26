@@ -368,7 +368,7 @@ void measure_susceptibility(){
            done = 0;
          }
        } while( done == 0 );  //Quit if no new site is found
-       */
+       
     } //neighbouring site (t3,x3)
    } //steps 
   // print_config();
