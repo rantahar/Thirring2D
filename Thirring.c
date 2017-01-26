@@ -1650,13 +1650,13 @@ int main(int argc, char* argv[])
       printf("Sign %d \n", det_sign);
 
       /* Write configuration */
-      write_config();
+      //write_config();
 
       gettimeofday(&start,NULL);
 
       if(i>n_thermalize) {
         /* Do measurements */
-        measure();
+        //measure();
 
         /* Time measurements */
         gettimeofday(&end,NULL);
