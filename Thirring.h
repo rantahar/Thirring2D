@@ -11,8 +11,8 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 64
-#define NX 64
+#define NT 16
+#define NX 4
 #define ND 2
 #define NDIRS (2*ND)
 
@@ -23,6 +23,9 @@
 
 #define VOLUME (NT*NX)
 
+//#define ANTISYMMETRIC //Antisymmetric boundaries
+#define OPENX         //Antisymmetric in time, open in space
+
 
 /* Enumerate possible values for a field */
 #define MONOMER 1
@@ -31,6 +34,7 @@
 #define LINK_TDN (2+TDN)
 #define LINK_XDN (2+XDN)
 #define SOURCE_MONOMER (2+NDIRS)
+#define EMPTY -100   //A meta value for sites that don't exist
 
 #define CG_ACCURACY 1e-20
 #define CG_MAX_ITER 10000

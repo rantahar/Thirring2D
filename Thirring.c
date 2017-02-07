@@ -121,6 +121,7 @@ static inline int is_legal(int t, int x, int nu){
 
 /* The fermion matrix
  */
+#ifdef ANTISYMMETRIC //Antisymmetrix boundaries
 double fM_index( int t1, int x1, int t2, int x2 )
 {
   if(t1==t2 ){ 
@@ -153,7 +154,37 @@ double fM_index( int t1, int x1, int t2, int x2 )
     else return( 0.0 );
   } else return( 0.0 );
 }
+#endif
 
+#ifdef OPENX //Open in space, antisymmetric in time
+double fM_index( int t1, int x1, int t2, int x2 )
+{
+ if( x1!=NX && x2!=NX ) {
+  if(t1==t2 ){ 
+    if( x2 == xup[x1]) { return 0.5*eta[t1][x1][1] ; }
+    else if( x2 == xdn[x1] ){ return -0.5*eta[t1][x1][1] ; }
+    else return( 0.0 );
+  }
+  else if ( x1==x2  ) {
+    if( t2 == tup[t1] ){
+#if NT==2
+      if (t2>t1) { return (exp(mu)+exp(-mu))*eta[t1][x1][0] ; }
+      else { return -(exp(mu)+exp(-mu))*eta[t1][x1][0] ; }
+#else
+      if (t2>t1) { return 0.5*exp(mu)*eta[t1][x1][0] ; }
+      else { return -0.5*exp(mu)*eta[t1][x1][0] ; }
+#endif
+    } else if ( t2 == tdn[t1] ) {
+#if NT>2
+      if (t2>t1) { return 0.5*exp(-mu)*eta[t1][x1][0] ; }
+      else { return -0.5*exp(-mu)*eta[t1][x1][0] ; }
+#endif
+    }
+    else return( 0.0 );
+  } else return( 0.0 );
+ } else return( 0.0 );
+}
+#endif
 
 /* Calculate the propagator matrix
  */
@@ -170,7 +201,12 @@ void calc_Dinv( )
 
   FILE * Dinv_file;
   char filename[100];
+#ifdef ANTISYMMETRIC
   sprintf(filename, "free_propagator_T%dX%d_mu%0.6f",NT,NX,mu);
+#endif
+#ifdef OPENX
+  sprintf(filename, "free_propagator_T%dX%d_mu%0.6f_open",NT,NX,mu);
+#endif
   
   Dinv_file = fopen(filename,"rb");
   if (Dinv_file){
@@ -245,26 +281,10 @@ void calc_Dinv( )
     free(work);
     free(M);
 
-    int x=1,t=0; 
-    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
-    x=0,t=1;
-    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
-    x=0,t=3;
-    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
-    x=0,t=5;
-    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
-    x=0,t=NT-1;
-    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
-    x=0,t=NT-3;
-    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  ); 
-    x=0,t=NT-5;
-    printf(" %g %g %g %g \n", Dinv[ 0 + (int)((NX*t+x)/2) ], Dinv[ n*n + 0 + (int)((NX*t+x)/2) ],Dinv[ (int)((NX*t+x)/2)*n + 0 ], Dinv[ n*n + (int)((NX*t+x)/2)*n + 0]  );
-
     gettimeofday(&end,NULL);
     int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
 
     printf("Inverted fermion matrix in %.3g seconds\n", 1e-6*diff);
-    printf(" LOGDETD %g \n", det/NT );
     Dinv_file = fopen(filename,"wb");
     if (Dinv_file){
       fwrite(Dinv, VOLUME*VOLUME/2, sizeof(double), Dinv_file);
@@ -473,8 +493,8 @@ void update_background( )
   }
 #endif
   previous_accepted_det = previous_det = 1;
-  //previous_sign = det_sign = 1-2*(det_e*det_o<0);
 #ifdef DEBUG
+  previous_sign = det_sign = (det_e*det_o)<0 ? -1 : 1;
   det_save = fabs(det_e*det_o);
 #endif
 
@@ -750,7 +770,11 @@ double extended_determinant( int me, int mo, int re, int ro ){
   printf("extended_determinant, n_added_even %d n_added_odd %d n_removed_even %d n_removed_odd %d, n %d\n",n_added_even,n_added_odd,n_removed_even,n_removed_odd,n);
 #endif
 
-  if(mr==0) return 1;
+  if(mr==0){
+    previous_sign = 1;
+    previous_det = 1;
+    return 1;
+  }
 
   /* Construct new parts of the fluctuation matrix */
   double *Dinv_odd = Dinv+VOLUME*VOLUME/4;
@@ -841,7 +865,8 @@ double extended_determinant( int me, int mo, int re, int ro ){
 
   free(F);
 
-  previous_sign = 1-2*(det<0);
+  previous_sign = det<0 ? -1: 1;
+  previous_det = fabs(det);
 
   return( fabs(det) );
 }
@@ -892,8 +917,6 @@ double det_added_link(int t, int x, int t2, int x2){
   printf("Adding at (%d,%d) (%d) and (%d,%d) (%d)\n",t,x,(t*NX+t)/2,t2,x2,(t2*NX+x2)/2);
   printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
 #endif
-  previous_det = det;
-
 
   return( detratio );
 }
@@ -946,7 +969,6 @@ double det_removed_link(int t, int x, int t2, int x2 ){
   printf("Removing at (%d,%d) and (%d,%d), values %d and %d\n",t,x,t2,x2,field[t][x],field[t2][x2]);
   printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
 #endif
-  previous_det = det;
 
   return( detratio );
 }
@@ -960,8 +982,8 @@ double det_moved_monomer(int t, int x, int t2, int x2){
 
   /* Make sure that (t,x) is even and (t2,x2) is odd */
   if( (t+x)%2 != (t2+x2)%2) { 
-    printf("Attempting to move to opposite parity\n");
-    exit(1);
+    //printf("Attempting to move to opposite parity\n");
+    return 0;
   }
   if( (t+x)%2 == 0 ) {
 
@@ -1002,7 +1024,6 @@ double det_moved_monomer(int t, int x, int t2, int x2){
     printf("Moving (%d,%d) (%d) to (%d,%d) (%d)\n",t,x,(NX*t+x)/2,t2,x2,(NX*t2+x2)/2);
     printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
 #endif
-    previous_det = det;
     
   } else {
 
@@ -1043,7 +1064,6 @@ double det_moved_monomer(int t, int x, int t2, int x2){
     printf("Moving (%d,%d) (%d) to (%d,%d) (%d)\n",t,x,(NX*t+x)/2,t2,x2,(NX*t2+x2)/2);
     printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
 #endif
-    previous_det = det;
   }
   return( detratio );
 }
@@ -1208,9 +1228,10 @@ void measure_propagator(){
   //vec_zero( source );
 
   //int t1=1;
-  for( int t1=0;t1<NT;t1++) /* for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ) */ {
+  for( int t1=0;t1<NT;t1++)  for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 )  {
       vec_zero( source );
-      for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ) source[t1][x1] = (mersenne()>0.5) ? -1:1 ;
+      //for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ) source[t1][x1] = (mersenne()>0.5) ? -1:1 ;
+      source[t1][x1] = 1;
 
       vec_zero( propagator );
       cg_propagator(propagator,source);
@@ -1222,15 +1243,19 @@ void measure_propagator(){
         //printf("Dinv %g\n",propagator[5][0]);
       }*/
 
-      for( int x1=0;x1<NX;x1++) for( int t2=0; t2<NT; t2++)
+      //for( int x1=0;x1<NX;x1++)
+      for( int t2=0; t2<NT; t2++)
         prop[(t2-t1+NT)%NT] += propagator[t2][x1];
 
-      for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 )
+      //for( int x1=0;x1<NX;x1++)
+      if( field[t1][x1] == 0 )
         j[t1] += exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
-      for( int x1=0;x1<NX;x1++) if( field[t1][x1] == 0 ) 
+      //for( int x1=0;x1<NX;x1++)
+      if( field[t1][x1] == 0 ) 
         j[tdn[t1]] += exp(-mu)* eta[tdn[t1]][x1][0]*propagator[tdn[t1]][x1];
       //source[t1][x1] = 0;
   }
+  j[NT-1] = -j[NT-1]; //Fix boundary condition
   
   for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, det_sign*prop[t2]/(VOLUME) );
   for( int t1=0;t1<NT;t1++)
@@ -1252,38 +1277,36 @@ void measure_susceptibility(){
  int n = n_bc_monomers/2 + n_bc_links;
  int steps = 0;
  int n_attempts=100;
- int meas_sign = det_sign;
 
  /* Do multiple attemps, these are cheap and the result is usually 0 */
- for( int attempt=0; attempt<n_attempts; attempt++ ){
-  /* Pick a site  */
-  int s1 = mersenne()*VOLUME ;
-  int t1 = s1/NX, x1=s1%NX, t2,x2;
+ update_linklists();
+ if(n_links > 0) for( int attempt=0; attempt<n_attempts; attempt++ ){
+   /* Pick a site with a link */
+   int s = links[ (int)(mersenne()*n_links) ];
+   int t1, x1, nu, t2,x2;
+   x1 = s % NX; t1 = (s/NX)%NT; nu = s/(NX*NT);
+   if(mersenne()>0.5) {  //pick one of the two sites
+     t1 = tdir(t1,nu); x1 = xdir(x1,nu);
+   }
 
-  //printf("measure_susceptibility: Initial site %d, (%d,%d), field %d\n",s1,t1,x1,field[t1][x1]);
-  if(field[t1][x1] >= LINK_TUP ){
    /* Chose a link, switch it to a pair of source monomers */
    int dir = field[t1][x1] - LINK_TUP;
-   link_off(t1,x1,dir); 
-   
+   link_off(t1,x1,dir);
+    
    t2 = tdir(t1,dir), x2 = xdir(x1,dir);
    field[t1][x1] = SOURCE_MONOMER ; field[t2][x2] = SOURCE_MONOMER ;
    
-   steps++;
+   steps+=det_sign;
+
+   #ifdef DEBUG
+   print_config();
+   check_det();
+   #endif
    
-   for(;; steps++ ){
-     //print_config();
-     //printf("measure_susceptibility: At site (%d,%d), field %d\n",t2,x2,field[t2][x2]);
-     /*if(steps>100000){
-       printf("Step number %d\n",steps);
-       print_config();
-       if(steps>100010) exit(1);
-     }*/
+   for(;;){
      /* Now we are at (t2,x2), and the link is off. Try to move. */
      int dir = NDIRS*mersenne();
      int t3 = tdir(t2,dir), x3 = xdir(x2,dir);
-
-     //printf("measure_susceptibility: Trying site (%d,%d), field %d\n",t3,x3,field[t3][x3]);
 
      if( mersenne() > 0.5 ){
       /* Try to exchange with an occupied neighbor */
@@ -1310,14 +1333,15 @@ void measure_susceptibility(){
 
         t2 = t3; x2 = x3;
       }
+      #ifdef DEBUG
+      print_config();
+      #endif
      } else {
       /*  Try to hop over */
       int dir2; 
       do dir2 = NDIRS*mersenne();
       while( dir2==opp_dir(dir));
       int t4 = tdir(t3,dir2), x4 = xdir(x3,dir2);
-
-      //printf("measure_susceptibility: Hop over, new site (%d,%d), field %d\n",t4,x4,field[t4][x4]);
 
       if( field[t4][x4] == 0 ) {
         /* Check for the chosen sites in added and removed lists */
@@ -1338,10 +1362,6 @@ void measure_susceptibility(){
         /* Get the difference in the determinant */
         double det;
         det = det_moved_monomer( t2, x2, t4, x4 );
-        
-        //printf("determinant ratio %g %g\n",det,previous_accepted_det);
-
-        //if( det == 0 ) { write_config(); exit(1); }
 
         if( mersenne() < det ){
           /* Accepted */
@@ -1371,14 +1391,16 @@ void measure_susceptibility(){
           det_save = det_save*previous_det/previous_accepted_det;
 #endif
           previous_accepted_det = previous_det;
-          //det_sign = previous_sign;
+          det_sign = previous_sign;
 
           #ifdef DEBUG
-          //print_config();
+          print_config();
           check_det();
           #endif
-          if(n_added_even == max_changes || n_added_odd == max_changes ||
-             n_removed_even == max_changes || n_removed_odd == max_changes ){
+          //if(n_added_even == max_changes || n_added_odd == max_changes ||
+          //   n_removed_even == max_changes || n_removed_odd == max_changes ){
+          if(n_added_even == 2 || n_added_odd == 2 ||
+             n_removed_even == 2 || n_removed_odd == 2 ){
             update_background();
             n_removed_even=n_removed_odd=0;
             n_added_even=n_added_odd=0;
@@ -1403,15 +1425,15 @@ void measure_susceptibility(){
           }
         }
       }
-
     } //neighbouring site (t3,x3)
-   } //steps 
-  } //First site site (t2,x2)
+
+    steps+=det_sign;
+   } //steps
+   update_linklists();
  } //attempts
 
- update_linklists();
 
- printf("Susceptibility %g \n",meas_sign*(double)steps/(U*4*NDIRS*n_attempts));
+ printf("Susceptibility %g \n",(double)steps*n_links/(U*2*NDIRS*n_attempts*VOLUME));
   
 }
 
@@ -1515,9 +1537,9 @@ int main(int argc, char* argv[])
   field = malloc( NT*sizeof(int *) );
   eta = malloc( NT*sizeof(int *) );
   for (int t=0; t<NT; t++){
-    field[t] = malloc( NX*sizeof(int) );
-    eta[t] = malloc( NX*sizeof(int *) );
-    for (int x=0; x<NX; x++) {
+    field[t] = malloc( NX*sizeof(int)+1 );
+    eta[t] = malloc( NX*sizeof(int *)+1 );
+    for (int x=0; x<NX+1; x++) {
      eta[t][x] = malloc( 2*sizeof(int) );
     }
   }
@@ -1535,6 +1557,11 @@ int main(int argc, char* argv[])
     printf(" Reading configuration file\n" );
     read_config(start_config);
   }
+#ifdef OPENX
+  for (int t=0; t<NT; t++) {
+    field[t][NX] = EMPTY; //Site doesn't exist, no links or monomers, but not free either
+  }
+#endif
 
 
   /* allocate propagator and lists */
@@ -1572,11 +1599,14 @@ int main(int argc, char* argv[])
     tup[i] = (i+1) % NT;
     tdn[i] = (i-1+NT) % NT;
   }
-
-  for (i=0; i<NX; i++) {
-    xup[i] = (i+1) % NX;
-    xdn[i] = (i-1+NX) % NX;
+  for (i=0; i<NX+1; i++) {
+    xup[i] = (i+1);
+    xdn[i] = (i-1);
   }
+#ifdef OPENX  //Never match boundaries to actual sites
+  xdn[0] = NX;
+  xup[NX] = NX;
+#endif
 
   /* fill the staggered eta array */
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
@@ -1586,6 +1616,9 @@ int main(int argc, char* argv[])
     } else {
       eta[t][x][0] = -1;
     }
+#ifdef OPENX  
+    eta[t][NX][0] = eta[t][NX][1] = 0;
+#endif
   }
 
   
@@ -1611,7 +1644,7 @@ int main(int argc, char* argv[])
   printf(" %g ",detratio);
 */
 
-/*  print_config();
+  /*print_config();
   int t2 = 63, x2 = 18;
   for(int mu=0; mu<4; mu++) for(int nu=0; nu<=mu; nu++){
     printf("  mu %d nu %d\n",mu,nu);
@@ -1641,6 +1674,8 @@ int main(int argc, char* argv[])
       int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
       printf("\n%d, %d updates in %.3g seconds, %d successfull changes, %g changes/update\n", i, n_measure, 1e-6*diff,changes,changes/((double) i));
       
+      print_config();
+
       /* Statistics */
       printf("MONOMERS %d \n", det_sign*n_monomers);
       printf("LINKS %d \n", det_sign*n_links);
@@ -1656,7 +1691,7 @@ int main(int argc, char* argv[])
 
       if(i>n_thermalize) {
         /* Do measurements */
-        //measure();
+        measure();
 
         /* Time measurements */
         gettimeofday(&end,NULL);
@@ -1760,11 +1795,11 @@ void check_det(  )
   
  }
 
- //printf( "even %4.3g odd %4.3g  n=%d\n", det_e, det_o, n );
+ printf( "even %4.3g odd %4.3g  n=%d\n", det_e, det_o, n );
  double diff =  fabs(fabs(det_e*det_o) - det_save);
 #ifdef DEBUG
  printf("CHECK det %g  accepted %g  diff %g, accepted factor %g \n", det_e*det_o, det_save, diff, previous_accepted_det);
- if(diff/fabs(det_e*det_o)>0.0000001){
+ if(diff/fabs(det_e*det_o)>0.00001){
     printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
    exit(1);
  }
