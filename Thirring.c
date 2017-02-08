@@ -1537,14 +1537,14 @@ int main(int argc, char* argv[])
   field = malloc( NT*sizeof(int *) );
   eta = malloc( NT*sizeof(int *) );
   for (int t=0; t<NT; t++){
-    field[t] = malloc( NX*sizeof(int)+1 );
-    eta[t] = malloc( NX*sizeof(int *)+1 );
+    field[t] = malloc( (NX+1)*sizeof(int) );
+    eta[t] = malloc( (NX+1)*sizeof(int *) );
     for (int x=0; x<NX+1; x++) {
      eta[t][x] = malloc( 2*sizeof(int) );
     }
   }
-  xup = malloc( NX*sizeof(int) );
-  xdn = malloc( NX*sizeof(int) );
+  xup = malloc( (NX+1)*sizeof(int) );
+  xdn = malloc( (NX+1)*sizeof(int) );
   tup = malloc( NT*sizeof(int) );
   tdn = malloc( NT*sizeof(int) );
 
@@ -1600,11 +1600,12 @@ int main(int argc, char* argv[])
     tdn[i] = (i-1+NT) % NT;
   }
   for (i=0; i<NX+1; i++) {
-    xup[i] = (i+1);
-    xdn[i] = (i-1);
+    xup[i] = (i+1) % NX;
+    xdn[i] = (i-1+NX) % NX;
   }
 #ifdef OPENX  //Never match boundaries to actual sites
   xdn[0] = NX;
+  xup[NX-1] = NX;
   xup[NX] = NX;
 #endif
 

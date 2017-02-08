@@ -23,8 +23,8 @@
 
 #define VOLUME (NT*NX)
 
-//#define ANTISYMMETRIC //Antisymmetric boundaries
-#define OPENX         //Antisymmetric in time, open in space
+#define ANTISYMMETRIC //Antisymmetric boundaries
+//#define OPENX         //Antisymmetric in time, open in space
 
 
 /* Enumerate possible values for a field */
