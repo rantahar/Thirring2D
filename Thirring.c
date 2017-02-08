@@ -342,11 +342,17 @@ int *newsite, **new_combination;
 /* Invert the matrix of propagators between occupied sites
  * Assing the current configuration as the background
  */
-double previous_accepted_det = 1;
-double previous_det = 1;
-double det_save = 1;
-int det_sign=1;
-int previous_sign=1;
+
+double accepted_det = 1;
+double fluctuation_det = 1;
+int bc_sign = 1;
+int current_sign=1;
+int fluctuation_sign=1;
+#ifdef DEBUG
+double bc_determinant = 1;
+double current_det = 1;
+#endif
+
 void update_background( )
 {
 
@@ -436,7 +442,7 @@ void update_background( )
   if( info != 0 ) {
     printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
 #ifdef DEBUG
-    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det);
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", current_det, accepted_det);
 #endif
     exit(-1);
   }
@@ -444,7 +450,7 @@ void update_background( )
   if( info != 0 ) {
     printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
 #ifdef DEBUG
-    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det);
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", current_det, accepted_det);
 #endif
     exit(-1);
   }
@@ -483,26 +489,33 @@ void update_background( )
   free(ipiv); free(ipiv_o);
  }
 
- //printf( "even %4.3g odd %4.3g  n=%d\n", det_e, det_o, n );
+
 #ifdef DEBUG
-  double det_diff =  fabs(fabs(det_e*det_o) - det_save);
-  printf("EXACT %g %g det %g  accepted %g  diff %g, accepted factor %g \n", det_e, det_o, det_e*det_o, det_save, det_diff, previous_accepted_det);
-  if(init == 0 && det_diff/(det_e*det_o)>0.0000001){
-    printf(" Incorrect determinant, det %g  accepted %g  diff %g, accepted factor %g \n",fabs(det_e*det_o), det_save, det_diff, previous_accepted_det);
+  current_det = bc_determinant*accepted_det;
+  double det_diff =  fabs(det_e*det_o - current_det);
+  printf("EXACT %g %g det %g  accepted %g  diff %g, accepted factor %g \n", det_e, det_o, det_e*det_o, current_det, det_diff, accepted_det);
+  if(init == 0 && det_diff/fabs(det_e*det_o)>0.0000001){
+    printf(" Incorrect determinant, old bc det %g, fluctuation %g \n", bc_determinant,accepted_det);
     exit(1);
   }
+  if(current_sign*det_e*det_o < 0){
+    printf("Wrong sign\n");
+    exit(1);
+  }
+
+  bc_determinant = det_e*det_o;
+  current_sign = (det_e*det_o)<0 ? -1 : 1;
 #endif
-  previous_accepted_det = previous_det = 1;
-#ifdef DEBUG
-  previous_sign = det_sign = (det_e*det_o)<0 ? -1 : 1;
-  det_save = fabs(det_e*det_o);
-#endif
+
+  accepted_det = fluctuation_det = 1;
+  fluctuation_sign = 1;
+  bc_sign = current_sign ;
 
   gettimeofday(&end,NULL);
   double diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
   printf("Inverted propagator matrices in %.3g seconds\n", 1e-6*diff);
 
-  /* Mark fluctutation matrix at all sites as not calculated */
+  /* Mark fluctuation matrix at all sites as not calculated */
   for( int a=0; a<VOLUME; a++ ) newsite[a] = 1;
   for( int a=0; a<VOLUME/2; a++ ) for( int b=0; b<VOLUME/2; b++ ) 
     new_combination[a][b] = 1;
@@ -587,10 +600,10 @@ int n_legal_links_after_removing(int t1, int x1, int t2, int x2){
 void new_link(int t, int x, int nu){
   link_on(t,x,nu);
 #ifdef DEBUG
-  det_save = det_save*previous_det/previous_accepted_det;
+  current_det = bc_determinant*fluctuation_det;
 #endif
-  previous_accepted_det = previous_det;
-  det_sign = previous_sign;
+  accepted_det = fluctuation_det;
+  current_sign = bc_sign*fluctuation_sign;
 
   int t2 = tdir(t,nu), x2=xdir(x,nu);
   int s1 = (t*NX + x)/2, s2 = (t2*NX+x2)/2;
@@ -628,11 +641,12 @@ void new_link(int t, int x, int nu){
 void new_monomer(int t1, int x1, int t2, int x2){
   n_monomers += 2;
   monomer_on(t1,x1,t2,x2);
+
 #ifdef DEBUG
-  det_save = det_save*previous_det/previous_accepted_det;
+  current_det = bc_determinant*fluctuation_det;
 #endif
-  previous_accepted_det = previous_det;
-  det_sign = previous_sign;
+  accepted_det = fluctuation_det;
+  current_sign = bc_sign*fluctuation_sign;
 
   int s1 = (t1*NX + x1)/2, s2 = (t2*NX+x2)/2;
   
@@ -669,11 +683,12 @@ void new_monomer(int t1, int x1, int t2, int x2){
 void removed_link(int t, int x, int nu){
   n_links -= 1;
   link_off(t,x,nu);
+
 #ifdef DEBUG
-  det_save = det_save*previous_det/previous_accepted_det;
+  current_det = bc_determinant*fluctuation_det;
 #endif
-  previous_accepted_det = previous_det;
-  det_sign = previous_sign;
+  accepted_det = fluctuation_det;
+  current_sign = bc_sign*fluctuation_sign;
 
   int t2 = tdir(t,nu), x2=xdir(x,nu);
   int s1 = (t*NX + x)/2, s2 = (t2*NX+x2)/2;
@@ -702,7 +717,7 @@ void removed_link(int t, int x, int nu){
   }
  
 #ifdef DEBUG
-  printf("Removed link at (%d,%d,%d) %g \n",t,x,nu,det_save);
+  printf("Removed link at (%d,%d,%d) %g \n",t,x,nu,current_det);
   printf(" indexes %d %d %d %d \n",n_added_even,n_added_odd,n_removed_even,n_removed_odd);
 #endif
   update_linklists();
@@ -716,11 +731,12 @@ void removed_monomer(int t1, int x1, int nu){
   n_monomers -= 2;
   link_off(t1,x1,nu);
   int t2 = tdir(t1,nu), x2=xdir(x1,nu);
+
 #ifdef DEBUG
-  det_save = det_save*previous_det/previous_accepted_det;
+  current_det = bc_determinant*fluctuation_det;
 #endif
-  previous_accepted_det = previous_det;
-  det_sign = previous_sign;
+  accepted_det = fluctuation_det;
+  current_sign = bc_sign*fluctuation_sign;
 
   if( (t1+x1)%2 == 1 ) { int t=t2, x=x2; t2=t1;x2=x1; t1=t;x1=x;}
 
@@ -746,7 +762,7 @@ void removed_monomer(int t1, int x1, int nu){
   }
 
 #ifdef DEBUG
-  printf("Removed monomer at (%d,%d,%d) %g \n",t1,x1,nu,det_save);
+  printf("Removed monomer at (%d,%d,%d) %g \n",t1,x1,nu,current_det);
   printf(" indexes %d %d %d %d \n",n_added_even,n_added_odd,n_removed_even,n_removed_odd);
 #endif
   update_linklists();
@@ -771,8 +787,8 @@ double extended_determinant( int me, int mo, int re, int ro ){
 #endif
 
   if(mr==0){
-    previous_sign = 1;
-    previous_det = 1;
+    fluctuation_sign = 1;
+    fluctuation_det = 1;
     return 1;
   }
 
@@ -865,10 +881,10 @@ double extended_determinant( int me, int mo, int re, int ro ){
 
   free(F);
 
-  previous_sign = det<0 ? -1: 1;
-  previous_det = fabs(det);
+  fluctuation_sign = det<0 ? -1: 1;
+  fluctuation_det = det;
 
-  return( fabs(det) );
+  return( det );
 }
 
 
@@ -912,10 +928,10 @@ double det_added_link(int t, int x, int t2, int x2){
   }
 
   double det = extended_determinant(me,mo,re,ro);
-  double detratio = det/previous_accepted_det;
+  double detratio = fabs(det/accepted_det);
 #ifdef DEBUG
   printf("Adding at (%d,%d) (%d) and (%d,%d) (%d)\n",t,x,(t*NX+t)/2,t2,x2,(t2*NX+x2)/2);
-  printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
+  printf(" new det %g  %g %g\n",current_det*detratio, det, accepted_det );
 #endif
 
   return( detratio );
@@ -964,10 +980,10 @@ double det_removed_link(int t, int x, int t2, int x2 ){
   }
 
   double det = extended_determinant(me,mo,re,ro);
-  double detratio = det/previous_accepted_det;
+  double detratio = fabs(det/accepted_det);
 #ifdef DEBUG
   printf("Removing at (%d,%d) and (%d,%d), values %d and %d\n",t,x,t2,x2,field[t][x],field[t2][x2]);
-  printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
+  printf(" new det %g  %g %g\n",current_det*detratio, det, accepted_det );
 #endif
 
   return( detratio );
@@ -983,6 +999,7 @@ double det_moved_monomer(int t, int x, int t2, int x2){
   /* Make sure that (t,x) is even and (t2,x2) is odd */
   if( (t+x)%2 != (t2+x2)%2) { 
     //printf("Attempting to move to opposite parity\n");
+    //exit(1);
     return 0;
   }
   if( (t+x)%2 == 0 ) {
@@ -1019,10 +1036,10 @@ double det_moved_monomer(int t, int x, int t2, int x2){
     }
 
     double det = extended_determinant(me,n_added_odd,re,n_removed_odd);
-    detratio = det/previous_accepted_det;
+    detratio = fabs(det/accepted_det);
 #ifdef DEBUG
     printf("Moving (%d,%d) (%d) to (%d,%d) (%d)\n",t,x,(NX*t+x)/2,t2,x2,(NX*t2+x2)/2);
-    printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
+    printf(" new det %g  %g %g\n",current_det*detratio, det, accepted_det );
 #endif
     
   } else {
@@ -1059,10 +1076,10 @@ double det_moved_monomer(int t, int x, int t2, int x2){
 
 
     double det = extended_determinant(n_added_even,mo,n_removed_even,ro);
-    detratio = det/previous_accepted_det;
+    detratio = fabs(det/accepted_det);
 #ifdef DEBUG
     printf("Moving (%d,%d) (%d) to (%d,%d) (%d)\n",t,x,(NX*t+x)/2,t2,x2,(NX*t2+x2)/2);
-    printf(" new det %g  %g %g\n",det_save*detratio, det, previous_accepted_det );
+    printf(" new det %g  %g %g\n",current_det*detratio, det, accepted_det );
 #endif
   }
   return( detratio );
@@ -1257,9 +1274,9 @@ void measure_propagator(){
   }
   j[NT-1] = -j[NT-1]; //Fix boundary condition
   
-  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, det_sign*prop[t2]/(VOLUME) );
+  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
   for( int t1=0;t1<NT;t1++)
-    printf("Charge %d %g\n", t1, det_sign*j[t1]/2 );
+    printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
 
   free_vector(source);
   free_vector(propagator);
@@ -1296,7 +1313,7 @@ void measure_susceptibility(){
    t2 = tdir(t1,dir), x2 = xdir(x1,dir);
    field[t1][x1] = SOURCE_MONOMER ; field[t2][x2] = SOURCE_MONOMER ;
    
-   steps+=det_sign;
+   steps+=current_sign;
 
    #ifdef DEBUG
    print_config();
@@ -1361,7 +1378,7 @@ void measure_susceptibility(){
 
         /* Get the difference in the determinant */
         double det;
-        det = det_moved_monomer( t2, x2, t4, x4 );
+        det = fabs(det_moved_monomer( t2, x2, t4, x4 ));
 
         if( mersenne() < det ){
           /* Accepted */
@@ -1388,10 +1405,10 @@ void measure_susceptibility(){
           field[t2][x2] = 0; field[t4][x4] = SOURCE_MONOMER;
           t2 = t4; x2 = x4;
 #ifdef DEBUG
-          det_save = det_save*previous_det/previous_accepted_det;
+          current_det = bc_determinant*fluctuation_det;
 #endif
-          previous_accepted_det = previous_det;
-          det_sign = previous_sign;
+          accepted_det = fluctuation_det;
+          current_sign = bc_sign*fluctuation_sign;
 
           #ifdef DEBUG
           print_config();
@@ -1427,7 +1444,7 @@ void measure_susceptibility(){
       }
     } //neighbouring site (t3,x3)
 
-    steps+=det_sign;
+    steps+=current_sign;
    } //steps
    update_linklists();
  } //attempts
@@ -1661,6 +1678,9 @@ int main(int argc, char* argv[])
 
     /* Update */
     changes += update();
+#ifdef DEBUG
+    check_det(  );
+#endif
 
     if((i%n_measure)==0){
 
@@ -1678,12 +1698,12 @@ int main(int argc, char* argv[])
       print_config();
 
       /* Statistics */
-      printf("MONOMERS %d \n", det_sign*n_monomers);
-      printf("LINKS %d \n", det_sign*n_links);
+      printf("MONOMERS %d \n", current_sign*n_monomers);
+      printf("LINKS %d \n", current_sign*n_links);
       #ifdef DEBUG
-      printf("Determinant %g \n", det_sign*det_save);
+      printf("Determinant %g \n", current_sign*current_det);
       #endif DEBUG
-      printf("Sign %d \n", det_sign);
+      printf("Sign %d \n", current_sign);
 
       /* Write configuration */
       //write_config();
@@ -1773,7 +1793,7 @@ void check_det(  )
   if( info != 0 ) {
     printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
 #ifdef DEBUG
-    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", current_det, accepted_det); 
 #endif
     exit(-1);
   }
@@ -1781,7 +1801,7 @@ void check_det(  )
   if( info != 0 ) {
     printf("sgetrf returned error %d (zero determinant has been accepted)! \n", info);
 #ifdef DEBUG
-    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
+    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", current_det, accepted_det); 
 #endif
     exit(-1);
   }
@@ -1796,15 +1816,17 @@ void check_det(  )
   
  }
 
- printf( "even %4.3g odd %4.3g  n=%d\n", det_e, det_o, n );
- double diff =  fabs(fabs(det_e*det_o) - det_save);
-#ifdef DEBUG
- printf("CHECK det %g  accepted %g  diff %g, accepted factor %g \n", det_e*det_o, det_save, diff, previous_accepted_det);
- if(diff/fabs(det_e*det_o)>0.00001){
-    printf(" Incorrect determinant, accepted det %g , accepted factor %g \n", det_save, previous_accepted_det); 
-   exit(1);
- }
-#endif
+  double current_det = bc_determinant*accepted_det;
+  double det_diff =  fabs(det_e*det_o - current_det);
+  printf("CHECK %g %g det %g  accepted %g  diff %g, accepted factor %g \n", det_e, det_o, det_e*det_o, current_det, det_diff, accepted_det);
+  if( det_diff/fabs(det_e*det_o)>0.0000001){
+    printf(" Incorrect determinant, old bc det %g, fluctuation %g \n", bc_determinant,accepted_det);
+    exit(1);
+  }
+  if(current_sign*det_e*det_o < 0){
+    printf("Wrong sign\n");
+    exit(1);
+  }
 
   free(check_Ginv);
   free(check_Ginv_odd);

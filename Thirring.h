@@ -11,7 +11,7 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 16
+#define NT 4
 #define NX 4
 #define ND 2
 #define NDIRS (2*ND)
@@ -23,8 +23,8 @@
 
 #define VOLUME (NT*NX)
 
-#define ANTISYMMETRIC //Antisymmetric boundaries
-//#define OPENX         //Antisymmetric in time, open in space
+//#define ANTISYMMETRIC //Antisymmetric boundaries
+#define OPENX         //Antisymmetric in time, open in space
 
 
 /* Enumerate possible values for a field */
