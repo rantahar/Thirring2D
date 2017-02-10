@@ -1695,7 +1695,7 @@ int main(int argc, char* argv[])
       int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
       printf("\n%d, %d updates in %.3g seconds, %d successfull changes, %g changes/update\n", i, n_measure, 1e-6*diff,changes,changes/((double) i));
       
-      print_config();
+      //print_config();
 
       /* Statistics */
       printf("MONOMERS %d \n", current_sign*n_monomers);
