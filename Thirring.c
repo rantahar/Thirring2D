@@ -188,6 +188,8 @@ double fM_index( int t1, int x1, int t2, int x2 )
 
 /* Calculate the propagator matrix
  */
+
+/*
 void calc_Dinv( )
 {
   int n=VOLUME/2;
@@ -217,9 +219,9 @@ void calc_Dinv( )
     struct timeval start, end;
     gettimeofday(&start,NULL);
 
-    /* Construct the full Volume to Volume Dirac matrix
-     * Odd to even here, the inverse will be even to odd
-     */
+    // Construct the full Volume to Volume Dirac matrix
+    // Odd to even here, the inverse will be even to odd
+    //
     work = malloc( lwork*sizeof(double) );
     M = malloc( lwork*sizeof(double) );
     for (int t1=0; t1<NT; t1++) for (int x1=0; x1<NX; x1++) if((t1+x1)%2==0) {
@@ -236,10 +238,6 @@ void calc_Dinv( )
       printf("calc_Dinv: sgetrf returned an error %d! \n", info);
       exit(-1);
     }
-    double det = 0;
-    for(int i=0; i<n; i++) {
-      det += log(fabs(M[i*n+i]));
-    }
 
     LAPACK_dgetri(&n, M, &n, ipiv, work, &lwork, &info);
     if( info != 0 ) {
@@ -249,7 +247,7 @@ void calc_Dinv( )
 
     for(int i = 0; i < n*n; i++) Dinv[i] = M[i];
 
-    /* Even to odd */
+    // Even to odd
     for (int t1=0; t1<NT; t1++) for (int x1=0; x1<NX; x1++) if((t1+x1)%2==1) {
       int i1 = (NX*t1 + x1)/2;
       for (int t2=0; t2<NT; t2++) for (int x2=0; x2<NX; x2++) if((t2+x2)%2==0) {
@@ -265,10 +263,6 @@ void calc_Dinv( )
       printf("calc_Dinv: sgetrf returned an error %d! \n", info);
       exit(-1);
     }
-
-    for(int i=0; i<n; i++) {
-      det += log(fabs(M[i*n+i]));
-    } 
 
     LAPACK_dgetri(&n, M, &n, ipiv, work, &lwork, &info);
     if( info != 0 ) {
@@ -293,6 +287,73 @@ void calc_Dinv( )
   }
   free(ipiv);
 }
+*/
+
+
+
+void calc_Dinv( )
+{
+  int n=VOLUME/2;
+
+  FILE * Dinv_file;
+  char filename[100];
+
+#ifdef ANTISYMMETRIC
+  sprintf(filename, "free_propagator_T%dX%d_mu%0.6f",NT,NX,mu);
+#endif
+#ifdef OPENX
+  sprintf(filename, "free_propagator_T%dX%d_mu%0.6f_open",NT,NX,mu);
+#endif
+
+  Dinv_file = fopen(filename,"rb");
+  if (Dinv_file){
+    fread(Dinv, VOLUME*VOLUME/2, sizeof(double), Dinv_file);
+    fclose(Dinv_file);
+  } else {
+    struct timeval start, end;
+    gettimeofday(&start,NULL);
+
+
+    double **source, **propagator;
+    source = alloc_vector();
+    propagator = alloc_vector();
+
+    for( int t1=0;t1<NT;t1++)  for( int x1=0;x1<NX;x1++) {
+      int i1 = (NX*t1 + x1)/2;
+      vec_zero( source );
+      source[t1][x1] = 1;
+
+      vec_zero( propagator );
+      cg_propagator(propagator,source);
+
+      
+      for( int x2=0;x2<NX;x2++) for( int t2=0; t2<NT; t2++){
+        int i2 = (NX*t2 + x2)/2;
+        if((t1+x1)%2==0 && (t2+x2)%2==1 ) Dinv[i2*n + i1] = propagator[t2][x2];
+        if((t1+x1)%2==1 && (t2+x2)%2==0 ) Dinv[n*n + i2*n + i1] = propagator[t2][x2];
+      }
+
+    }
+
+
+    gettimeofday(&end,NULL);
+    int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
+
+    printf("Inverted fermion matrix in %.3g seconds\n", 1e-6*diff);
+    Dinv_file = fopen(filename,"wb");
+    if (Dinv_file){
+      fwrite(Dinv, VOLUME*VOLUME/2, sizeof(double), Dinv_file);
+      fclose(Dinv_file);
+    }
+  }
+
+}
+
+
+
+
+
+
 
 void write_config(){
   FILE * config_file;
