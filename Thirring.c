@@ -1511,7 +1511,7 @@ void measure_susceptibility(){
  } //attempts
 
 
- printf("Susceptibility %g \n",(double)steps*n_links/(U*2*NDIRS*n_attempts*VOLUME));
+ printf("Susceptibility %g \n",(double)steps*n_links/(NDIRS*n_attempts*VOLUME));
   
 }
 
