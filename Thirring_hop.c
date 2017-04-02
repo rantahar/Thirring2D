@@ -12,7 +12,7 @@
 #include "Thirring.h"
 
 /* storage */
-int    eta[NT][NX][ND];   //Staggered eta matrix
+int    ***eta;   //Staggered eta matrix
 double m;
 double U;
 double mu;
@@ -22,15 +22,20 @@ double mu;
  */
 int n_monomers=0;
 int n_links=0;
-int field[NT][NX];
-int diraclink[NT][NX];
+int **field;
+int **diraclink;
+
+/* Size of the fluctuation matrix, used in measurements
+ */
+int max_changes;
 
 /* Pseudofermion fields */
 double *psi,*chi;
 
 /* Neighbour index arrays, to be filled at the beginning
  */
-int tup[NT],xup[NX],tdn[NT],xdn[NX];
+
+int *tup,*xup,*tdn,*xdn;
 
 /* Functions for fetching neighboring coordinates */
 static inline int tdir(int t, int dir){
@@ -110,97 +115,226 @@ static inline int is_legal(int t, int x, int nu){
 
 /* Suggest adding a link
  */
-int update_link()
+int update_link_at(int s)
 {
   int success = 0;
+  int t = s/NT, x = s%NT;
 
-  /* Draw a legal site */
-  int s = (int) (mersenne()*VOLUME);
-  int t = s%NX, x = s/NX;
-  
-  if( field[t][x] > MONOMER ) {
+  //printf("Testing (%d,%d) %d \n",t,x,field[t][x]);
+
+  if( field[t][x] >= LINK_TUP ) {
     /* Remove link at t,x */
     //Note the factor of 4 from the dirac operator,
     //each dirac link has 0.5
+    int dir = field[t][x]-2;
+    int t2 = tdir(t,dir), x2 = xdir(x,dir);
+    //printf("Removing link at (%d,%d) %d, (%d,%d) \n",t,x,dir,t2,x2);
     if( mersenne() < 1/(4*U) ) {
-      int mu = field[t][x]-2;
-      int t2 = tdir(t,mu), x2 = xdir(x,mu);
-      link_off(t,x,mu);
+      link_off(t,x,dir);
       /* Replace with 2 opposing arrows */
-      diraclink[t][x] = mu;
-      diraclink[t2][x2] = opp_dir(mu);
+      diraclink[t][x] = dir;
+      diraclink[t2][x2] = opp_dir(dir);
       n_links--;
       success = 1;
     }
   } else {
     /* No link, add if possible */
-    int mu = diraclink[t][x];
-    int t2 = tdir(t,mu), x2 = xdir(x,mu);
+    int dir = diraclink[t][x];
+    int t2 = tdir(t,dir), x2 = xdir(x,dir);
     int nu = diraclink[t2][x2];
 
-    //printf("Adding link at %d %d %d\n",t,x,mu);
+    //printf("Adding link at (%d,%d) %d, (%d,%d) \n",t,x,dir,t2,x2);
 
-    if( mu<NDIRS && mu == opp_dir(nu) ){  //Two opposing arrows, easy to add
+    if( dir<NDIRS && dir == opp_dir(nu) ){
+      //Two opposing arrows, easy to add
       //Note the factor of 4 from the dirac operator,
       //each dirac link has 0.5
       if( mersenne() < 4*U ) {
-        link_on(t,x,mu);
+        link_on(t,x,dir);
         diraclink[t][x] = NDIRS;
         diraclink[t2][x2] = NDIRS;
         n_links++;
         success = 1;
-        //printf("Accepted");
       }
     }
   }
-  
   return success;
+}
+
+
+int update_link()
+{
+  return update_link_at( (int) (mersenne()*VOLUME) );
+}
+
+
+int add_link_at(int t, int x)
+{
+  int success = 0;
+  //printf("Trying to add at (%d,%d) %d \n",t,x,field[t][x]-2);
+
+  if( field[t][x] == 0 ) {
+
+    int dir = diraclink[t][x];
+    int t2 = tdir(t,dir), x2 = xdir(x,dir);
+    int nu = diraclink[t2][x2];
+
+    if( dir<NDIRS && nu == opp_dir(dir) ){
+      //Two opposing arrows, easy to add
+      //Note the factor of 4 from the dirac operator,
+      //each dirac link has 0.5
+      if( mersenne() < 4*U ) {
+        link_on(t,x,dir);
+        diraclink[t][x] = NDIRS;
+        diraclink[t2][x2] = NDIRS;
+        n_links++;
+        success = 1;
+      }
+    }
+  }
+  return success;
+}
+
+
+int remove_link_at(int t, int x)
+{
+  int success = 0;
+  //printf("Trying to remove at (%d,%d) %d \n",t,x,field[t][x]-2);
+
+  if( field[t][x] >= LINK_TUP ) {
+    /* Remove link at t,x */
+    //Note the factor of 4 from the dirac operator,
+    //each dirac link has 0.5
+    int dir = field[t][x]-2;
+    int t2 = tdir(t,dir), x2 = xdir(x,dir);
+    if( mersenne() < 1/(4*U) ) {
+      link_off(t,x,dir);
+      /* Replace with 2 opposing arrows */
+      diraclink[t][x] = dir;
+      diraclink[t2][x2] = opp_dir(dir);
+      n_links--;
+      success = 1;
+    }
+  }
+  return success;
+}
+
+
+int linksign(int t,int x,int dir){
+    int e = eta[t][x][dir%ND];
+    if( dir == TDN ) e *= -1;
+    if( dir == XDN ) e *= -1;
+    if( x == NX-1 && dir == XUP ) e*= -1;
+    if( t == NT-1 && dir == TUP ) e*= -1;
+    if( x == 0 && dir == XDN ) e*= -1;
+    if( t == 0 && dir == TDN ) e*= -1;
+    return e;
+}
+
+int find_sign(int t0, int x0, int t, int x){
+  int dir = diraclink[t0][x0];
+  int sign = linksign(t0,x0,dir);
+  //printf("sign (%d,%d) %d %d\n",t0,x0,dir,sign);
+  int t1 = tdir(t0, dir), x1= xdir(x0, dir);
+  while( t1 != t || x1 != x ){
+    dir = diraclink[t1][x1];
+    sign *= linksign(t1,x1,dir);
+    //printf("sign (%d,%d) %d %d\n",t1,x1,dir,sign);
+    t1 = tdir(t1, dir), x1 = xdir(x1, dir);
+  }
+  return( sign );
 }
 
 
 
 
 //Update the Dirac background using a worm update
+//Measures the fermion propagator
 int update_dirac_background(){
+  int propagator[NT];
+  for(int t=0;t<NT;t++) propagator[t]=0;
 
   //Pick a site
-  int t= mersenne()*NT, x=mersenne()*NT;
-  int done = 0;
+  int t= mersenne()*NT, x=mersenne()*NX;
+  
+  //We break a link to create a fermion correlator.
+  //The point the original link points to is the
+  //starting point of the correlator
+  int dir = diraclink[t][x];
+  int t0 = tdir(t, dir), x0 = xdir(x, dir);
+  
+  double p = 2;    //There is always a factor 0.5 for each link
+  if( dir == TUP ) p *= exp(-mu);
+  if( dir == TDN ) p *= exp(mu);
+  
+  if(field[t][x] == 0 && mersenne() < p ){
+    //printf("STARTING worm at (%d,%d) %g \n",t,x,p);
+    int done = 0;
+    diraclink[t][x] = 10;
+    
+    for(int i=0;;i++) {
+      //printf("WORM at (%d,%d) \n",t,x);
+      //printf("Sign %d\n",find_sign(t0,x0,t,x));
+      //print_config();
+      propagator[ (t-t0+NT)%NT ]+=find_sign(t0,x0,t,x);
 
-  if(field[t][x] == 0 ) do {
-    //Pick a random direction to turn the link
-    int mu = mersenne()*NDIRS;
+      //Pick a random direction to create a link
+      int dir = mersenne()*NDIRS;
 
-    //printf(" t %d x %d mu0 %d mu %d field %d \n",t,x,diraclink[t][x],mu, field[t][x]);
+      double p=0.5;
+      if( dir == TUP ) p *= exp(mu);
+      if( dir == TDN ) p *= exp(-mu);
 
-    //follow to a new site
-    int t2 = tdir(t, mu), x2 = xdir(x, mu);
-    if( field[t2][x2] == 0 ) { //Cannot point at a monomer
+      //printf(" adding (%d,%d) mu %d, %g \n",t,x,dir,p);
 
-      //flip the link
-      diraclink[t][x] = mu;
-
-      //See if we now have two sites pointing to the same place
-      done = 1;
-      int t3,x3; //New site
-      for( int nu = 0; nu<NDIRS; nu++ ) {
-        t3 = tdir(t2, nu), x3 = xdir(x2, nu);
-        if( diraclink[t3][x3] == opp_dir(nu) ){
-          //Found a site pointing to t2,x2
-          if( !( t3==t && x3==x) ){
-            //And it's a new one, flip it next
-            done = 0;
+      int t2 = tdir(t, dir), x2 = xdir(x, dir);
+      if( t2 == t0 && x2 == x0 ) {
+        if( mersenne() < p ){
+          diraclink[t][x] = dir;
+          //printf("WORM closed\n");
+          break;
+        }
+      } else {
+      
+       if(mersenne()<0.5){
+        int removeddir; //If we accept, this one will be removed
+        int t3=t,x3=x;  //New site
+        for( int dir2 = 0; dir2<NDIRS; dir2++ ) {
+          t3 = tdir(t2, dir2), x3 = xdir(x2, dir2);
+          if( diraclink[t3][x3] == opp_dir(dir2) ){
+            //Found a site pointing to t2,x2
+            removeddir = diraclink[t3][x3];
             break;
           }
         }
+        p*=2;
+        if( removeddir == TUP ) p *= exp(-mu);
+        if( removeddir == TDN ) p *= exp(mu);
+      
+        //printf(" adding (%d,%d) mu %d, removing (%d,%d) %d %g \n",t,x,dir, t3,x3,removeddir,p);
+        
+        //flip and follow to a new site with propability p
+         if(field[t2][x2]==0) if( mersenne() < p ){
+          //flip the link
+          diraclink[t][x] = dir;
+          diraclink[t3][x3] = 10;
+          t=t3; x=x3;
+        }
+       } else {
+    
+        // Check if we can add or remove link over the site 
+        if( field[t2][x2] == 0 ){
+          add_link_at( t2, x2 );
+        } else {
+          remove_link_at( t2, x2 ); 
+        }
+       }
       }
-
-      //move to the new site
-      t = t3; x = x3;
-      //printf(" site found at %d %d \n",t3,x3);
     }
-  } while( done == 0 );  //Quit if no new site is found
+  }
   
+  for(int t=0;t<NT;t++) printf("PROPAGATOR %d %d\n",t,propagator[t]);
+
 
   //printf("Background updated\n");
   return 1;
@@ -214,9 +348,8 @@ int update()
   int changes=0;
 
   update_dirac_background();
-
-  changes += update_link();
   
+  //for(int i=0;i<10;i++) changes+=update_link();
   return changes;
 }
 
@@ -242,7 +375,7 @@ int update()
 
 void print_config()
 {
-  for (int t=0; t<NT; t++) {
+  for (int t=NT; t--; ) {
     for (int x=0; x<NX; x++){
       int empty = 1;
       if(field[t][x]==MONOMER)  { empty = 0; printf(" o "); }
@@ -252,8 +385,9 @@ void print_config()
       if(field[t][x]==LINK_XDN) { empty = 0; printf("-- "); }
       if(field[t][x]==SOURCE_MONOMER) { empty = 0; printf(" x "); } //A source monomer
       //if(empty==1) {
-        if(diraclink[t][x]==TUP) printf(" v ");
-        if(diraclink[t][x]==TDN) printf(" ^ ");
+        if(diraclink[t][x]==10) printf(" . ");
+        if(diraclink[t][x]==TUP) printf(" ^ ");
+        if(diraclink[t][x]==TDN) printf(" v ");
         if(diraclink[t][x]==XUP) printf(" > ");
         if(diraclink[t][x]==XDN) printf(" < ");
       //}
@@ -273,6 +407,11 @@ void measure_charge(){
   }
   printf("CHARGE %d\n",c);
 }
+
+
+
+
+
 
 
 
@@ -311,6 +450,9 @@ int main(int argc, char* argv[])
   printf(" Random number : ");
   scanf("%ld",&seed);
   seed_mersenne( seed );
+  
+  printf(" maximum size of fluctuation matrix : ");
+  scanf("%d",&max_changes);
 
   /* "Warm up" the rng generator */
   for (i=0; i<543210; i++) mersenne();
@@ -321,7 +463,26 @@ int main(int argc, char* argv[])
   printf(" m %f \n", m);
   printf(" U %f \n", U);
   printf(" mu %f \n", mu);
+  printf(" Size of fluctuation matrix %d\n", max_changes );
   printf(" Random seed %ld\n", seed );
+
+  /* Allocate location and field arrays */
+  field = malloc( NT*sizeof(int *) );
+  diraclink = malloc( NT*sizeof(int *) );
+  eta = malloc( NT*sizeof(int *) );
+  for (int t=0; t<NT; t++){
+    field[t] = malloc( (NX+1)*sizeof(int) );
+    diraclink[t] = malloc( (NX+1)*sizeof(int) );
+    eta[t] = malloc( (NX+1)*sizeof(int *) );
+    for (int x=0; x<NX+1; x++) {
+     eta[t][x] = malloc( 2*sizeof(int) );
+    }
+  }
+  xup = malloc( (NX+1)*sizeof(int) );
+  xdn = malloc( (NX+1)*sizeof(int) );
+  tup = malloc( NT*sizeof(int) );
+  tdn = malloc( NT*sizeof(int) );
+
 
 
   /* fill up the index array */
@@ -329,27 +490,46 @@ int main(int argc, char* argv[])
     tup[i] = (i+1) % NT;
     tdn[i] = (i-1+NT) % NT;
   }
-
-  for (i=0; i<NX; i++) {
+  for (i=0; i<NX+1; i++) {
     xup[i] = (i+1) % NX;
     xdn[i] = (i-1+NX) % NX;
   }
+#ifdef OPENX  //Never match boundaries to actual sites
+  xdn[0] = NX;
+  xup[NX-1] = NX;
+  xup[NX] = NX;
+#endif
 
   /* fill the staggered eta array */
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
-    eta[t][x][0] = 1;
-    if( t%2 == 0 ){
-      eta[t][x][1] = 1;
+    eta[t][x][1] = 1;
+    if( x%2 == 0 ){
+      eta[t][x][0] = 1;
     } else {
-      eta[t][x][1] = -1;
+      eta[t][x][0] = -1;
     }
+#ifdef OPENX  
+    eta[t][NX][0] = eta[t][NX][1] = 0;
+#endif
   }
 
   /* fill monomers and links */
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
     field[t][x] = 0;
-    diraclink[t][x] = 2*(x%2);
+    diraclink[t][x] = TUP ;
+
   }
+
+  int ** field_copy = malloc( NT*sizeof(int *) );
+  for (int t=0; t<NT; t++) field_copy[t] = malloc( (NX+1)*sizeof(int) );
+  
+#ifdef OPENX
+  for (int t=0; t<NT; t++) {
+    field[t][NX] = EMPTY; //Site doesn't exist, no links or monomers, but not free either
+    field_copy[t][NX] = EMPTY;
+    diraclink[t][NX] = EMPTY;
+  }
+#endif
   
   /* and the update/measure loop */
   int changes = 0;
@@ -365,16 +545,29 @@ int main(int argc, char* argv[])
       /* Time and report */
       gettimeofday(&end,NULL);
       int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
-      printf("\n%d, %d updates in %.3g seconds, %d successfull changes, %g changes/update\n", i, n_measure, 1e-6*diff,changes,changes/((double) i));
+      printf("\n%d, %d updates in %.3g seconds\n", i, n_measure, 1e-6*diff);
 
-      //print_config();
+      print_config();
       
       /* Statistics */
       printf("MONOMERS %d \n", n_monomers);
       printf("LINKS %d \n", n_links);
 
+      // The measurements can change the configuration
+      //without taking the dirac background into account
+      for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) field_copy[t][x] = field[t][x];
+      
       measure_charge();
+      measure_propagator();
+      measure_susceptibility();
 
+      n_links = 0;
+      for (int t=0; t<NT; t++) for (int x=0; x<NX; x++){
+          field[t][x] = field_copy[t][x];
+          if(field[t][x] >= LINK_TUP ) n_links++;
+      }
+      n_links/=2;
+      
       gettimeofday(&start,NULL);
     }
   }
@@ -392,7 +585,197 @@ int main(int argc, char* argv[])
 
 
 
+/*
+ This does not take the sign into account
+ 
+int find_link_pointing_at( int t, int x ){
+  int t2,x2, dir;
+  for( dir = 0; dir<NDIRS; dir++ ) {
+    t2 = tdir(t, dir), x2 = xdir(x, dir);
+    if( diraclink[t2][x2] == opp_dir(dir) ){
+      //Found a site pointing to t,2
+    break;
+    }
+  }
+  return dir;
+}
 
+//Update the Dirac background using a worm update
+//Measures the fermion propagator
+void move_source_monomer(int *ts0, int *xs0, int dir){
+
+  int t = *ts0, x = *xs0;
+  int t2 = tdir(t, dir), x2 = xdir(x, dir);
+  int t0,x0;  //point where the propagator starts
+  int ts,xs;  //the location of the source
+  
+  //printf("START move monomer (%d,%d) %d\n",t,x,dir);
+  if( field[t][x] != SOURCE_MONOMER ){
+    //printf("No source monomer here\n");
+    exit(1);
+  }
+  
+  if( field[t2][x2] != 0 ){
+    return ;
+  }
+  
+  int done=1;
+  
+  if( mersenne() > 0.5) {
+    //printf("Starting by moving \n");
+    int dir2 = find_link_pointing_at(t2,x2);
+    int t3 = tdir(t2, dir2), x3 = xdir(x2, dir2);
+    int dir3 = find_link_pointing_at(t3,x3);
+    int t4 = tdir(t3, dir3), x4 = xdir(x3, dir3);
+
+    double p = 1;
+    if( mersenne() < p ){
+
+      field[t][x] = 0;
+      field[t3][x3] = SOURCE_MONOMER;
+      diraclink[t4][x4] = 10;
+      diraclink[t3][x3] = NDIRS;
+      diraclink[t][x] = dir;
+      
+      t0 = t; x0 = x;
+      ts = t3; xs = x3;
+      t=t4; x=x4;
+      done = 0;
+    }
+    
+  } else {
+    //printf("Starting by removing a link \n");
+    int dir2 = find_link_pointing_at(t2,x2);
+    int t3 = tdir(t2, dir2), x3 = xdir(x2, dir2);
+    int dir3 = find_link_pointing_at(t3,x3);
+    int t4 = tdir(t3, dir3), x4 = xdir(x3, dir3);
+    
+    t0 = t3, x0 = x3;
+    diraclink[t4][x4] = 10;
+    ts = t; xs = x;
+    t = t4; x = x4;
+    done = 0;
+    
+  }
+  
+  for(;done==0;){
+      //print_config();
+      // Now keep updating the worm until it closes
+      int dir = mersenne()*NDIRS;
+      //printf("move (%d,%d) to dir %d\n",t,x,dir);
+      t2 = tdir(t, dir), x2 = xdir(x, dir);
+      if( t2==ts && x2 == xs ) {
+        //Pointing at the source, move it back and close the worm
+        int t3,x3;
+        int dir2 = diraclink[t0][x0];
+        t3 = tdir(t0, dir2), x3 = xdir(x0, dir2);
+        for(dir2 = 0; dir2<NDIRS; dir2++){
+            if( tdir(t2,dir2) == t3 && xdir(x2,dir2) == x3 ){
+                break;
+            }
+        }
+        
+        double p = 1;
+        if( mersenne() < p ){
+          field[t0][x0] = SOURCE_MONOMER;
+          field[t2][x2] = 0;
+          diraclink[t][x] = dir;
+          diraclink[t0][x0] = NDIRS;
+          diraclink[t2][x2] = dir2;
+          *ts0 = t0; *xs0 = x0; 
+          done = 1;
+        }
+      } else if(t2 == t0 && x2 == x0) {
+        //Ending up at the beginning of the correlator
+        //close the worm
+        double p = 1;
+        if( mersenne() < 0.5 && mersenne() < p ){
+          diraclink[t][x] = dir;
+          //printf("WORM closed\n");
+          *ts0 = ts; *xs0 = xs; 
+          done = 1;
+        }
+      } else {
+        //This is the standard worm step
+        int removeddir; //If we accept, this one will be removed
+        int t3,x3;  //New site
+        for( int dir2 = 0; dir2<NDIRS; dir2++ ) {
+          t3 = tdir(t2, dir2), x3 = xdir(x2, dir2);
+          if( diraclink[t3][x3] == opp_dir(dir2) ){
+            //Found a site pointing to t2,x2
+            removeddir = diraclink[t3][x3];
+            break;
+          }
+        }
+        double p=1;
+        if( removeddir == TUP ) p *= exp(-mu);
+        if( removeddir == TDN ) p *= exp(mu);
+        
+        //printf(" adding (%d,%d) mu %d, removing (%d,%d) %d %g \n",t,x,dir, t3,x3,removeddir,p);
+        
+        //flip and follow to a new site with propability p
+         if(field[t2][x2]==0) if( mersenne() < p ){
+          //flip the link
+          diraclink[t][x] = dir;
+          diraclink[t3][x3] = 10;
+          t=t3; x=x3;
+        }
+      }
+  }
+
+
+}
+
+void measure_susceptibility(){
+  int nsteps = 0;
+  //Pick a site
+  int t= mersenne()*NT, x=mersenne()*NX;
+  printf("STARTING susceptibility at (%d,%d)\n",t,x);
+  if( field[t][x] >= LINK_TUP){
+    print_config();
+    //Replace the link with two source monomers
+    int dir = field[t][x]-2;
+    int t2 = tdir(t, dir), x2 = xdir(x, dir);
+
+    field[t][x] = SOURCE_MONOMER;
+    field[t2][x2] = SOURCE_MONOMER;
+    n_links--;
+    
+    nsteps++;
+    for(;;){
+      print_config();
+      int dir = mersenne()*NDIRS;
+      int t3 = tdir(t2, dir), x3 = xdir(x2, dir);
+      
+      if( t3==t && x3==x ) {
+         // Back at the original site, turn into a link 
+         field[t][x]=0; field[t2][x2]=0;
+         link_on(t2,x2,dir);
+         n_links++;
+         break;
+
+       } else if( field[t3][x3] >= LINK_TUP ) {
+         // found a link, flip it  
+         int linkdir = field[t3][x3] - LINK_TUP;
+         int t4 = tdir(t3,linkdir), x4 = xdir(x3,linkdir);
+
+         field[t2][x2] = 0;
+         link_off(t3,x3,linkdir); link_on(t2,x2,dir);
+         field[t4][x4] = SOURCE_MONOMER;
+
+         t2 = t4; x2 = x4;
+
+       } else {
+         move_source_monomer(&t2,&x2,dir);
+       }
+    }  
+  }
+
+  print_config();
+  printf("Susceptibility %g \n",(double)2*nsteps);
+
+}
+*/
 
 
 

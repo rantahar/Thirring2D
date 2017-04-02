@@ -13,15 +13,15 @@ void check_det(  );
 #include "Thirring.h"
 
 /* storage */
-int    ***eta;   //Staggered eta matrix
+extern int    ***eta;   //Staggered eta matrix
 double *Dinv;             //Storage for even to odd propagator
 int    *evenlist, *oddlist;  //Lists of occupied sites
-extern int    *unoccupied_evenlist, *unoccupied_oddlist;  //Lists of occupied sites
-extern int *added_evensites, *added_oddsites, *removed_evenlist, *removed_oddlist;
-extern int n_added_even,n_added_odd,n_removed_even,n_removed_odd;
-double m, m_update;
-double U;
-double mu;
+int    *unoccupied_evenlist, *unoccupied_oddlist;  //Lists of occupied sites
+int *added_evensites, *added_oddsites, *removed_evenlist, *removed_oddlist;
+int n_added_even,n_added_odd,n_removed_even,n_removed_odd;
+extern double m;
+extern double U;
+extern double mu;
 
 /* Maximum number of fluctuations from the background configuration */
 int max_changes;
@@ -29,9 +29,9 @@ int max_changes;
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
  */
-int n_monomers=0;
-int n_links=0;
-int **field;
+extern int n_monomers;
+extern int n_links;
+extern int **field;
 int n_bc_monomers;  //Numbers of links and monomers in the background
 int n_bc_links;
 
@@ -42,7 +42,7 @@ double *Ginv;
 
 /* Neighbour index arrays, to be filled at the beginning
  */
-int *tup,*xup,*tdn,*xdn;
+extern int *tup,*xup,*tdn,*xdn;
 
 int current_sign=1;
 
@@ -133,47 +133,6 @@ static inline int is_legal(int t, int x, int nu){
 }
 
 
-
-
-
-
-void write_config(){
-  FILE * config_file;
-  char filename[100];
-  sprintf(filename, "config_checkpoint_T%dX%d_U%.6gm%.6gmu%.6g",NT,NX,U,m,mu);
-
-  int * buffer = malloc(NX*NT*sizeof(int));
-  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) 
-    buffer[t*NX+x] = field[t][x];
-  
-  config_file = fopen(filename,"wb");
-  if (config_file){
-    fwrite(buffer, VOLUME, sizeof(int), config_file);
-    fclose(config_file);
-  } else {
-    printf("Could not write configuration\n");
-    exit(1);
-  }
-  free(buffer);
-}
-
-
-void read_config(char * filename){
-  FILE * config_file;
-  
-  config_file = fopen(filename,"rb");
-  int * buffer = malloc(NX*NT*sizeof(int));
-  if (config_file){
-    fread(buffer, VOLUME, sizeof(int), config_file);
-    fclose(config_file);
-  } else {
-    printf("Could not read configuration\n");
-    exit(1);
-  }
-  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) 
-    field[t][x] = buffer[t*NX+x];
-  free(buffer);
-}
 
 
 
@@ -294,103 +253,8 @@ int move_monomer(){
 }
 
 
-/* Suggest adding a link
- */
-int add_link()
-{
-  int success = 0;
-  if(n_legalemptylinks > 0){
-
-    /* Draw a legal site */
-    int s = legalemptylinks[ (int) (mersenne()*n_legalemptylinks) ];
-    int t, x, nu;
-    x = s % NX; t = (s/NX)%NT; nu = s/(NX*NT);
-    int t2,x2;
-    t2 = tdir(t,nu); x2 = xdir(x,nu);
-
-    if( mersenne() < 0.5 ) {
-      if( m_update > 0 ){
-        double d = det_added_link(t,x,t2,x2);
-        double p=( n_legalemptylinks/(double)n_legal_monomers_after_adding(t,x,t2,x2) );
-        p*= m_update*m_update*d;
-        if( mersenne() < p ) {
-          new_monomer(t,x,t2,x2);
-          success = 1;
-        }
-      }
-    } else {
-      double d = det_added_link(t,x,t2,x2);
-      double p=( n_legalemptylinks/((double)n_links+1) ) * U*d;
-      //printf(" Adding, p %g le %d ll %d\n", p, n_legalemptylinks, n_links+1);
-      if( mersenne() < p ) {
-        new_link(t,x,nu);
-        success = 1;
-      }
-    }
-  }
-  
-  return success;
-}
-
-int remove_link()
-{
-  int success = 0;
-  /* Try removing either a link or a monomer */
-  if( mersenne() < 0.5 ){
-    if(n_legalmonomers > 0){
-      int s = legalmonomers[ (int)(mersenne()*n_legalmonomers) ];
-      int t, x, nu;
-      x = s % NX; t = (s/NX)%NT; nu = s/(NX*NT);
-      int t2,x2;
-      t2 = tdir(t,nu); x2 = xdir(x,nu);
-
-      double M = det_removed_link(t,x,t2,x2);
-      double p = ( n_legalmonomers/((double)n_legal_links_after_removing(t,x,t2,x2)) );
-      p *= M/(m_update*m_update);
-      if( mersenne() < p ){
-        removed_monomer(t,x,nu);
-        success = 1;
-      }
-    }
-  } else {
-    if( n_links > 0){
-      int s = links[ (int)(mersenne()*n_links) ];
-      int t, x, nu;
-      x = s % NX; t = (s/NX)%NT; nu = s/(NX*NT);
-      int t2,x2;
-      t2 = tdir(t,nu); x2 = xdir(x,nu);
-
-      double M = det_removed_link(t,x,t2,x2);
-      double p = ( n_links/((double) n_legal_links_after_removing(t,x,t2,x2) ) ) * M/U;
-      //printf(" Removing, p %g det %g ll %d le %d\n",p,M*M,n_links,n_legal_links_after_removing(t,x,t2,x2));
-      if( mersenne() < p ){
-        removed_link(t,x,nu);
-        success = 1;
-      }
-    }
-  }
-  return success;
-}
 
 
-
-int update()
-{
-  int changes=0;
-  update_linklists();
-  if(mersenne()>0.5){
-    changes+=remove_link();
-  } else {
-    changes+=add_link();
-  }
-  
-  #ifdef DEBUG
-  //check_det( );
-  //print_config();
-  #endif
-  //move_monomer();
-  return changes;
-}
 
 
 
@@ -482,6 +346,63 @@ extern int moved_old_site, moved_new_site;
  * susceptibility , Z_J/Z_0 = U*NDIRS/V * dZ_J/dJ |_J=0.
  */
 void measure_susceptibility(){
+    
+ static int init = 1;
+ if( init == 1 ){
+   #ifdef FLUCTUATION_MATRIX
+   Dinv = malloc( VOLUME*VOLUME*sizeof(double)/2 );
+   Ginv = malloc( VOLUME*VOLUME*sizeof(double)/2 );
+   evenlist = malloc( VOLUME*sizeof(int)/2 );
+   oddlist  = malloc( VOLUME*sizeof(int)/2 );
+   unoccupied_evenlist = malloc( VOLUME*sizeof(int)/2 );
+   unoccupied_oddlist  = malloc( VOLUME*sizeof(int)/2 );
+ 
+   added_evensites = malloc(VOLUME/2*sizeof(int));
+   added_oddsites = malloc(VOLUME/2*sizeof(int));
+   removed_evenlist = malloc(VOLUME/2*sizeof(int));
+   removed_oddlist = malloc(VOLUME/2*sizeof(int));
+  
+   if (NULL == Dinv) {
+     fprintf(stderr, "failed to allocate Dinv\n");
+     return(-1);
+   }
+   if (NULL == Ginv) {
+     fprintf(stderr, "failed to allocate Ginv\n");
+     return(-1);
+   }
+   if (NULL == evenlist) {
+     fprintf(stderr, "failed to allocate evenlist\n");
+     return(-1);
+   }
+   if (NULL == oddlist) {
+     fprintf(stderr, "failed to allocate oddlist\n");
+     return(-1);
+   }
+   #endif
+   #ifdef PROPAGATOR_MATRIX
+   int ** field_copy = malloc( NT*sizeof(int *) );
+   for (int t=0; t<NT; t++) field_copy[t] = malloc( (NX+1)*sizeof(int) );
+   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
+     field_copy[t][x] = field[t][x];
+     field[t][x] = 0;
+   }
+   #ifdef OPENX
+   for (int t=0; t<NT; t++) {
+     field_copy[t][NX] = EMPTY; //Site doesn't exist, no links or monomers, but not free either
+   }
+   #endif
+   calc_Dinv( );
+   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
+     field[t][x] = field_copy[t][x];
+   }
+   for (int t=0; t<NT; t++) free(field_copy[t]);
+   free(field_copy);
+   #endif
+   update_linklists();
+   update_background();
+   
+ }
+    
  int n = n_bc_monomers/2 + n_bc_links;
  int steps = 0;
  int n_attempts=10;
@@ -623,291 +544,6 @@ void measure_susceptibility(){
   
 }
 
-
-
-
-void print_config()
-{
-  for (int t=0; t<NT; t++) {
-    for (int x=0; x<NX; x++){
-      int empty = 1;
-      if(field[t][x]==MONOMER)  { empty = 0; printf(" o "); }
-      if(field[t][x]==LINK_TUP) { empty = 0; printf(" v "); }
-      if(field[t][x]==LINK_XUP) { empty = 0; printf("  >"); }
-      if(field[t][x]==LINK_TDN) { empty = 0; printf(" ^ "); }
-      if(field[t][x]==LINK_XDN) { empty = 0; printf("<  "); }
-      if(field[t][x]==SOURCE_MONOMER) { empty = 0; printf(" x "); } //A source monomer
-      if(empty==1) { printf(" . "); }
-    }
-    printf(" \n");
-  }
-  printf(" \n");
-  //usleep(100000);
-}
-
-static int measurement = 0;
-void measure()
-{ 
-#ifdef DEBUG
-  //print_config();
-#endif
-
-  measure_propagator();
-  measure_susceptibility();
-
-  measurement++;
-}
-
-
-
-
-/* Main function
- */
-int main(int argc, char* argv[])
-{
-  #ifdef DEBUG
-  feenableexcept(FE_INVALID | FE_OVERFLOW);
-  #endif 
-
-  int i,n_loops,n_measure,n_thermalize;
-  long seed;
-
-  /* Read in the input */
-  printf(" Number of updates : ");
-  scanf("%d",&n_loops);
-
-  printf(" Updates / measurement : ");
-  scanf("%d",&n_measure);
-  
-  printf(" Thermalization updates : ");
-  scanf("%d",&n_thermalize);
-  printf("%d\n",n_thermalize);
-
-  printf(" m : ");
-  scanf("%lf",&m);
-
-  printf(" U : ");
-  scanf("%lf",&U);
-
-  printf(" mu : ");
-  scanf("%lf",&mu);
-
-  printf(" Random number : ");
-  scanf("%ld",&seed);
-  seed_mersenne( seed );
-
-  printf(" maximum size of fluctuation matrix : ");
-  scanf("%d",&max_changes);
-
-  char start_config[100];
-  printf(" Start configuration : ");
-  scanf("%s",&start_config);
-
-
-  /* "Warm up" the rng generator */
-  for (i=0; i<543210; i++) mersenne();
-
-  printf(" \n++++++++++++++++++++++++++++++++++++++++++\n");
-  printf(" 4D free fermion, ( %d , %d ) lattice\n", NT, NX );
-  printf(" %d updates per measurements\n", n_measure );
-  printf(" m %f \n", m);
-  printf(" U %f \n", U);
-  printf(" mu %f \n", mu);
-  printf(" Size of fluctuation matrix %d\n", max_changes );
-  printf(" Random seed %ld\n", seed );
-  printf(" Start configuration %s\n", start_config );
-
-#ifdef WITH_MASS_MONOMERS
-  m_update = m;
-  m=0;
-#else
-  m_update = 0;
-#endif
-
-  field = malloc( NT*sizeof(int *) );
-  eta = malloc( NT*sizeof(int *) );
-  for (int t=0; t<NT; t++){
-    field[t] = malloc( (NX+1)*sizeof(int) );
-    eta[t] = malloc( (NX+1)*sizeof(int *) );
-    for (int x=0; x<NX+1; x++) {
-     eta[t][x] = malloc( 2*sizeof(int) );
-    }
-  }
-  xup = malloc( (NX+1)*sizeof(int) );
-  xdn = malloc( (NX+1)*sizeof(int) );
-  tup = malloc( NT*sizeof(int) );
-  tdn = malloc( NT*sizeof(int) );
-
-  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
-    field[t][x] = 0;
-  }
-#ifdef OPENX
-  for (int t=0; t<NT; t++) {
-    field[t][NX] = EMPTY; //Site doesn't exist, no links or monomers, but not free either
-  }
-#endif
-
-
-  /* allocate propagator and lists */
-#ifdef FLUCTUATION_MATRIX
-  Dinv = malloc( VOLUME*VOLUME*sizeof(double)/2 );
-  Ginv = malloc( VOLUME*VOLUME*sizeof(double)/2 );
-  evenlist = malloc( VOLUME*sizeof(int)/2 );
-  oddlist  = malloc( VOLUME*sizeof(int)/2 );
-  unoccupied_evenlist = malloc( VOLUME*sizeof(int)/2 );
-  unoccupied_oddlist  = malloc( VOLUME*sizeof(int)/2 );
-
-  added_evensites = malloc(VOLUME/2*sizeof(int));
-  added_oddsites = malloc(VOLUME/2*sizeof(int));
-  removed_evenlist = malloc(VOLUME/2*sizeof(int));
-  removed_oddlist = malloc(VOLUME/2*sizeof(int));
-  
-  if (NULL == Dinv) {
-    fprintf(stderr, "failed to allocate Dinv\n");
-    return(-1);
-  }
-  if (NULL == Ginv) {
-    fprintf(stderr, "failed to allocate Ginv\n");
-    return(-1);
-  }
-  if (NULL == evenlist) {
-    fprintf(stderr, "failed to allocate evenlist\n");
-    return(-1);
-  }
-  if (NULL == oddlist) {
-    fprintf(stderr, "failed to allocate oddlist\n");
-    return(-1);
-  }
-#endif
-
-  /* fill up the index array */
-  for (i=0; i<NT; i++) {
-    tup[i] = (i+1) % NT;
-    tdn[i] = (i-1+NT) % NT;
-  }
-  for (i=0; i<NX+1; i++) {
-    xup[i] = (i+1) % NX;
-    xdn[i] = (i-1+NX) % NX;
-  }
-#ifdef OPENX  //Never match boundaries to actual sites
-  xdn[0] = NX;
-  xup[NX-1] = NX;
-  xup[NX] = NX;
-#endif
-
-  /* fill the staggered eta array */
-  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
-    eta[t][x][1] = 1;
-    if( x%2 == 0 ){
-      eta[t][x][0] = 1;
-    } else {
-      eta[t][x][0] = -1;
-    }
-#ifdef OPENX  
-    eta[t][NX][0] = eta[t][NX][1] = 0;
-#endif
-  }
-
-  
-  /* calculate propagators */
-#ifdef PROPAGATOR_MATRIX
-  calc_Dinv( );
-#endif
-
-  if(strcmp(start_config,"cold")!=0) {
-    printf(" Reading configuration file\n" );
-    read_config(start_config);
-  } else {
-    printf(" Starting from a cold configuration\n" );
-    //for (int t=0; t<NT; t++) if(t%2==0) for (int x=0; x<NX; x++) {
-    //  link_on(t,x,TUP);
-    //}
-  }
-
-  /* Background and fluctuation matrix */
-  update_linklists();
-#ifdef FLUCTUATION_MATRIX
-  update_background( );
-#endif
-
-/*
-  double detratio= det_added_link( 0, 0, 0, 1);
-
-  printf(" %g ",detratio);
-
-  new_link(0 , 0, 1);
-
-  detratio= det_added_link( 1, 2, 1, 3);
-
-  printf(" %g ",detratio);
-*/
-
-  /*print_config();
-  int t2 = 63, x2 = 18;
-  for(int mu=0; mu<4; mu++) for(int nu=0; nu<=mu; nu++){
-    printf("  mu %d nu %d\n",mu,nu);
-    int t3,x3,t4,x4;
-    t3 = tdir(t2,mu); x3 = xdir(x2,mu);
-    t4 = tdir(t3,nu); x4 = xdir(x3,nu);
-    det_moved_monomer( t2, x2, t4, x4 );
-  }
-  exit(0);  
-*/
-
-  /* and the update/measure loop */
-  int changes = 0;
-  struct timeval start, end;
-  gettimeofday(&start,NULL);
-  for (i=1; i<n_loops+1; i++) {
-
-    /* Update */
-    changes += update();
-#ifdef DEBUG
-    check_det(  );
-#endif
-    
-    if((i%n_measure)==0){
-
-      /* Update the background and count links and monomers */
-      update_linklists();
-      
-      /* Time and report */
-      gettimeofday(&end,NULL);
-      int diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
-      printf("\n%d, %d updates in %.3g seconds, %d successfull changes, %g changes/update\n", i, n_measure, 1e-6*diff,changes,changes/((double) i));
-
-      /* Statistics */
-      printf("MONOMERS %d \n", current_sign*n_monomers);
-      printf("LINKS %d \n", current_sign*n_links);
-      printf("Determinant %g \n", accepted_det);
-      #ifdef DEBUG
-      //printf("Determinant %g \n", current_sign*current_det);
-      print_config();
-      #endif DEBUG
-      printf("Sign %d \n", current_sign);
-
-      /* Write configuration */
-      write_config();
-
-      gettimeofday(&start,NULL);
-
-      if(i>n_thermalize) {
-        /* Do measurements */
-        measure();
-
-        /* Time measurements */
-        gettimeofday(&end,NULL);
-        diff = 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
-        printf("Measurement %d done in %.3g seconds\n", i/n_measure, 1e-6*diff);
-        gettimeofday(&start,NULL);
-      }
-    }
-  }
-
-  printf(" ** simulation done\n");
-
-  return(1);
-}
 
 
 
