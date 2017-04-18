@@ -422,10 +422,12 @@ void measure_propagator(){
   source = alloc_vector();
   propagator = alloc_vector();
 
-  for( int t1=0;t1<2;t1++) 
+  for( int t1=0;t1<NT;t1++) 
   for( int x1=0;x1<NX;x1++) {
     int bc_dn = 1, bc_up = 1;
+#ifdef ANTISYMMETRIC
     if(t1 == 0) bc_dn = -1;  if(t1 == NT-1) bc_up = -1;
+#endif
 
     if( field[t1][x1] == 0 ) {
       vec_zero( source );
@@ -460,8 +462,8 @@ void measure_propagator(){
 
   
   for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
-  for( int t1=0;t1<1;t1++) printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
-  for( int t1=0;t1<1;t1++)  printf("Qchi %d %g\n", t1, current_sign*c[t1]/2 );
+  for( int t1=0;t1<NT;t1++) printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
+  for( int t1=0;t1<NT;t1++)  printf("Qchi %d %g\n", t1, current_sign*c[t1]/2 );
   //for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, current_sign*q[t1] );
   printf("Qchi2  %g\n", current_sign*c[0]*c[0]/4 );
 
@@ -484,7 +486,7 @@ extern int moved_old_site, moved_new_site;
 void measure_susceptibility(){
  int n = n_bc_monomers/2 + n_bc_links;
  int steps = 0;
- int n_attempts=10;
+ int n_attempts=20;
  double scale_factor = (double)n_links/(NDIRS*n_attempts*VOLUME);
 
  /* Do multiple attemps, these are cheap and the result is usually 0 */
@@ -750,17 +752,17 @@ int main(int argc, char* argv[])
 
   /* allocate propagator and lists */
 #ifdef FLUCTUATION_MATRIX
-  Dinv = malloc( VOLUME*VOLUME*sizeof(double)/2 );
-  Ginv = malloc( VOLUME*VOLUME*sizeof(double)/2 );
-  evenlist = malloc( VOLUME*sizeof(int)/2 );
-  oddlist  = malloc( VOLUME*sizeof(int)/2 );
-  unoccupied_evenlist = malloc( VOLUME*sizeof(int)/2 );
-  unoccupied_oddlist  = malloc( VOLUME*sizeof(int)/2 );
+  Dinv = malloc( VOLUME*VOLUME*sizeof(double) );
+  Ginv = malloc( VOLUME*VOLUME*sizeof(double) );
+  evenlist = malloc( VOLUME*sizeof(int) );
+  oddlist  = malloc( VOLUME*sizeof(int) );
+  unoccupied_evenlist = malloc( VOLUME*sizeof(int) );
+  unoccupied_oddlist  = malloc( VOLUME*sizeof(int) );
 
-  added_evensites = malloc(VOLUME/2*sizeof(int));
-  added_oddsites = malloc(VOLUME/2*sizeof(int));
-  removed_evenlist = malloc(VOLUME/2*sizeof(int));
-  removed_oddlist = malloc(VOLUME/2*sizeof(int));
+  added_evensites = malloc(VOLUME*sizeof(int));
+  added_oddsites = malloc(VOLUME*sizeof(int));
+  removed_evenlist = malloc(VOLUME*sizeof(int));
+  removed_oddlist = malloc(VOLUME*sizeof(int));
   
   if (NULL == Dinv) {
     fprintf(stderr, "failed to allocate Dinv\n");
@@ -803,7 +805,7 @@ int main(int argc, char* argv[])
     } else {
       eta[t][x][0] = -1;
     }
-#ifdef OPENX  
+#ifdef OPENX
     eta[t][NX][0] = eta[t][NX][1] = 0;
 #endif
   }

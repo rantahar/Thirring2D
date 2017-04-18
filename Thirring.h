@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "mersenne.h"
-#include <lapacke.h>
+#include <lapacke/lapacke.h>
 #include <time.h>
 #include <sys/time.h>
 
@@ -11,7 +11,7 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 4
+#define NT 16
 #define NX 4
 
 #define ND 2
@@ -25,7 +25,8 @@
 #define VOLUME (NT*NX)
 
 //#define ANTISYMMETRIC //Antisymmetric boundaries
-#define OPENX       //Antisymmetric in time, open in space
+#define SYMMETRIC     //implemented in Thirring_hop
+//#define OPENX       //open in space, (anti)symmetric in time
 
 
 /* Enumerate possible values for a field */
@@ -44,7 +45,7 @@
 #define flip_exit_propability 0.2
 
 #define FLUCTUATION_MATRIX
-#define WITH_MASS_MONOMERS
+//#define WITH_MASS_MONOMERS
 #define PROPAGATOR_MATRIX
 
 /* Functions in vec_ops.c */

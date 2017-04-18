@@ -323,7 +323,7 @@ void measure_propagator(){
   }
 
   
-  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
+  //for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
   for( int t1=0;t1<1;t1++) printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
   for( int t1=0;t1<1;t1++)  printf("Qchi %d %g\n", t1, current_sign*c[t1]/2 );
   //for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, current_sign*q[t1] );
@@ -332,6 +332,11 @@ void measure_propagator(){
   free_vector(source);
   free_vector(propagator);
 }
+
+
+
+
+
 
 
 extern double accepted_det;
@@ -345,7 +350,7 @@ extern int moved_old_site, moved_new_site;
  * The number of intermediate configurations counts the Z_J/Z_0, which is the 
  * susceptibility , Z_J/Z_0 = U*NDIRS/V * dZ_J/dJ |_J=0.
  */
-void measure_susceptibility(){
+void measure_susceptibility( double * susc){
     
  static int init = 1;
  if( init == 1 ){
@@ -398,10 +403,12 @@ void measure_susceptibility(){
    for (int t=0; t<NT; t++) free(field_copy[t]);
    free(field_copy);
    #endif
-   update_linklists();
-   update_background();
    
+   init = 0;
  }
+ update_linklists();
+ update_background();
+ 
     
  int n = n_bc_monomers/2 + n_bc_links;
  int steps = 0;
@@ -409,7 +416,6 @@ void measure_susceptibility(){
  double scale_factor = (double)n_links/(NDIRS*n_attempts*VOLUME);
 
  /* Do multiple attemps, these are cheap and the result is usually 0 */
- update_linklists();
  if(n_links > 0) for( int attempt=0; attempt<n_attempts; attempt++ ){
    /* Pick a site with a link */
    int s = links[ (int)(mersenne()*n_links) ];
@@ -539,8 +545,7 @@ void measure_susceptibility(){
    update_linklists();
  } //attempts
 
-
- printf("Susceptibility %g \n",(double)steps*scale_factor);
+ *susc = (double)steps*scale_factor;
   
 }
 

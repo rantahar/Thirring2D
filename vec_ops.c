@@ -92,6 +92,7 @@ void free_vector(double ** a){
 
 /* The fermion matrix
  */
+#ifdef ANTISYMMETRIC
 void fM(double **chi, double **psi )
 {
   static double expmu, expmmu;
@@ -104,6 +105,7 @@ void fM(double **chi, double **psi )
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
     chi[t][x] = 0;
     if( field[t][x] == 0 ) {
+      chi[t][x] = m*psi[t][x];
       int t2=tup[t];
       if( field[t2][x] == 0 ) {
         if( t2 > t ) chi[t][x] += 0.5 * eta[t][x][0] * expmu * psi[t2][x] ;
@@ -142,6 +144,7 @@ void fM_transpose(double **chi, double **psi)
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
     chi[t][x] = 0;
     if( field[t][x] == 0 ) {
+      chi[t][x] = m*psi[t][x];
       int t2=tup[t];
       if( field[t2][x] == 0 ) {
         if( t2 > t ) chi[t][x] -= 0.5 * eta[t][x][0] * expmmu * psi[t2][x] ;
@@ -167,6 +170,80 @@ void fM_transpose(double **chi, double **psi)
     }
   }
 }
+#endif
+
+#ifdef SYMMETRIC
+void fM(double **chi, double **psi )
+{
+  static double expmu, expmmu;
+  static int init=1;
+  if(init){
+    expmu = exp(mu);
+    expmmu = exp(-mu);
+    init = 0;
+  }
+  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
+    chi[t][x] = 0;
+    if( field[t][x] == 0 ) {
+      chi[t][x] = m*psi[t][x];
+      int t2=tup[t];
+      if( field[t2][x] == 0 ) {
+        chi[t][x] += 0.5 * eta[t][x][0] * expmu * psi[t2][x] ;
+      }
+      t2 = tdn[t];
+      if( field[t2][x] == 0 ) {
+        chi[t][x] -= 0.5 * eta[t][x][0] * expmmu * psi[t2][x] ;
+      }
+      int x2 = xup[x];
+      if( field[t][x2] == 0 ){
+        chi[t][x] += 0.5 * eta[t][x][1] * psi[t][x2] ;
+      }
+      x2 = xdn[x];
+      if( field[t][x2] == 0 ){
+        chi[t][x] -= 0.5 * eta[t][x][1] * psi[t][x2] ;
+      }
+    } else {
+      chi[t][x] = psi[t][x]; //An occupied site, matrix becomes identity
+    }
+  }
+}
+
+void fM_transpose(double **chi, double **psi)
+{
+  static double expmu, expmmu;
+  static int init=1;
+  if(init){
+    expmu = exp(mu);
+    expmmu = exp(-mu);
+    init = 0;
+  }
+  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
+    chi[t][x] = 0;
+    if( field[t][x] == 0 ) {
+      chi[t][x] = m*psi[t][x];
+      int t2=tup[t];
+      if( field[t2][x] == 0 ) {
+        chi[t][x] -= 0.5 * eta[t][x][0] * expmmu * psi[t2][x] ;
+      }
+      t2 = tdn[t];
+      if( field[t2][x] == 0 ) {
+        chi[t][x] += 0.5 * eta[t][x][0] * expmu * psi[t2][x] ;
+      }
+      int x2 = xup[x];
+      if( field[t][x2] == 0 ){
+        chi[t][x] -= 0.5 * eta[t][x][1] * psi[t][x2] ;
+      }
+      x2 = xdn[x];
+      if( field[t][x2] == 0 ){
+        chi[t][x] += 0.5 * eta[t][x][1] * psi[t][x2] ;
+      }
+    } else {
+      chi[t][x] = psi[t][x]; //An occupied site, matrix becomes identity
+    }
+  }
+}
+#endif
+
 
 double * alloc_field(){
   double * a = malloc(VOLUME*sizeof(double*));
@@ -237,9 +314,9 @@ void cg_propagator( double **propagator, double **source )
 
   fM_transpose( tmp, source );
   cg_MdM( propagator, tmp );
-  //fM( tmp, propagator ); //To test cg
-  //vec_dmul_add( tmp, tmp, source, -1 );
-  //printf(" test CG %g \n", vec_dot( tmp, tmp ));
+  fM( tmp, propagator ); //To test cg
+  vec_dmul_add( tmp, tmp, source, -1 );
+  printf(" test CG %g \n", vec_dot( tmp, tmp ));
   free_vector(tmp);
 }
 
