@@ -92,7 +92,7 @@ void free_vector(double ** a){
 
 /* The fermion matrix
  */
-#ifdef ANTISYMMETRIC
+#if defined(ANTISYMMETRIC) || defined(OPENX)
 void fM(double **chi, double **psi )
 {
   static double expmu, expmmu;
@@ -188,11 +188,13 @@ void fM(double **chi, double **psi )
       chi[t][x] = m*psi[t][x];
       int t2=tup[t];
       if( field[t2][x] == 0 ) {
-        chi[t][x] += 0.5 * eta[t][x][0] * expmu * psi[t2][x] ;
+        if( t2 > t ) chi[t][x] += 0.5 * eta[t][x][0] * expmu * psi[t2][x] ;
+        else chi[t][x] -= 0.5 * eta[t][x][0] * expmu * psi[t2][x] ;
       }
       t2 = tdn[t];
       if( field[t2][x] == 0 ) {
-        chi[t][x] -= 0.5 * eta[t][x][0] * expmmu * psi[t2][x] ;
+        if( t2 > t ) chi[t][x] += 0.5 * eta[t][x][0] * expmmu * psi[t2][x] ;
+        else chi[t][x] -= 0.5 * eta[t][x][0] * expmmu * psi[t2][x] ;
       }
       int x2 = xup[x];
       if( field[t][x2] == 0 ){
@@ -223,11 +225,13 @@ void fM_transpose(double **chi, double **psi)
       chi[t][x] = m*psi[t][x];
       int t2=tup[t];
       if( field[t2][x] == 0 ) {
-        chi[t][x] -= 0.5 * eta[t][x][0] * expmmu * psi[t2][x] ;
+        if( t2 > t ) chi[t][x] -= 0.5 * eta[t][x][0] * expmmu * psi[t2][x] ;
+        else chi[t][x] += 0.5 * eta[t][x][0] * expmmu * psi[t2][x] ;
       }
       t2 = tdn[t];
       if( field[t2][x] == 0 ) {
-        chi[t][x] += 0.5 * eta[t][x][0] * expmu * psi[t2][x] ;
+        if( t2 > t ) chi[t][x] -= 0.5 * eta[t][x][0] * expmu * psi[t2][x] ;
+        else chi[t][x] += 0.5 * eta[t][x][0] * expmu * psi[t2][x] ;
       }
       int x2 = xup[x];
       if( field[t][x2] == 0 ){
@@ -314,9 +318,9 @@ void cg_propagator( double **propagator, double **source )
 
   fM_transpose( tmp, source );
   cg_MdM( propagator, tmp );
-  fM( tmp, propagator ); //To test cg
-  vec_dmul_add( tmp, tmp, source, -1 );
-  printf(" test CG %g \n", vec_dot( tmp, tmp ));
+  //fM( tmp, propagator ); //To test cg
+  //vec_dmul_add( tmp, tmp, source, -1 );
+  //printf(" test CG %g \n", vec_dot( tmp, tmp ));
   free_vector(tmp);
 }
 

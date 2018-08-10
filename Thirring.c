@@ -422,12 +422,10 @@ void measure_propagator(){
   source = alloc_vector();
   propagator = alloc_vector();
 
-  for( int t1=0;t1<NT;t1++) 
+  for( int t1=0;t1<2;t1++) 
   for( int x1=0;x1<NX;x1++) {
     int bc_dn = 1, bc_up = 1;
-#ifdef ANTISYMMETRIC
     if(t1 == 0) bc_dn = -1;  if(t1 == NT-1) bc_up = -1;
-#endif
 
     if( field[t1][x1] == 0 ) {
       vec_zero( source );
@@ -437,12 +435,17 @@ void measure_propagator(){
       cg_propagator(propagator,source);
 
       /*if( t1==0 && x1==0 ){
-        printf("Dinv %g\n",propagator[0][1]);
-        printf("Dinv %g\n",propagator[1][0]);
-        printf("Dinv %g\n",propagator[3][0]);
+        printf("prop %g\n",propagator[0][1]);
+        printf("prop %g\n",propagator[1][0]);
+        printf("prop %g\n",propagator[3][0]);
+      
+
+        printf("Dinv %g\n",Dinv[(NX*0+1)*VOLUME]);
+        printf("Dinv %g\n",Dinv[(NX*1+0)*VOLUME]);
+        printf("Dinv %g\n",Dinv[(NX*3+0)*VOLUME]);
       }*/
 
-      for( int t2=0; t2<NT; t2++) prop[(t2-t1+NT)%NT] += propagator[t2][x1];
+      //for( int t2=0; t2<NT; t2++) prop[(t2-t1+NT)%NT] += propagator[t2][x1];
 
       j[t1] += bc_up*exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
       c[t1] += bc_up*((x1+t1)%2 ==0 ? 1:-1 )* exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
@@ -461,9 +464,9 @@ void measure_propagator(){
   }
 
   
-  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
-  for( int t1=0;t1<NT;t1++) printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
-  for( int t1=0;t1<NT;t1++)  printf("Qchi %d %g\n", t1, current_sign*c[t1]/2 );
+  //for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
+  for( int t1=0;t1<1;t1++) printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
+  for( int t1=0;t1<1;t1++)  printf("Qchi %d %g\n", t1, current_sign*c[t1]/2 );
   //for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, current_sign*q[t1] );
   printf("Qchi2  %g\n", current_sign*c[0]*c[0]/4 );
 
@@ -503,7 +506,7 @@ void measure_susceptibility(){
    /* Chose a link, switch it to a pair of source monomers */
    int dir = field[t1][x1] - LINK_TUP;
    link_off(t1,x1,dir);
-    
+   
    t2 = tdir(t1,dir), x2 = xdir(x1,dir);
    field[t1][x1] = SOURCE_MONOMER ; field[t2][x2] = SOURCE_MONOMER ;
    
@@ -710,7 +713,7 @@ int main(int argc, char* argv[])
   for (i=0; i<543210; i++) mersenne();
 
   printf(" \n++++++++++++++++++++++++++++++++++++++++++\n");
-  printf(" 4D free fermion, ( %d , %d ) lattice\n", NT, NX );
+  printf(" 2D free fermion, ( %d , %d ) lattice\n", NT, NX );
   printf(" %d updates per measurements\n", n_measure );
   printf(" m %f \n", m);
   printf(" U %f \n", U);

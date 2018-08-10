@@ -225,11 +225,11 @@ int linksign(int t,int x,int dir){
     int e = eta[t][x][dir%ND];
     if( dir == TDN ) e *= -1;
     if( dir == XDN ) e *= -1;
+    if( t == NT-1 && dir == TUP ) e*= -1;
+    if( t == 0 && dir == TDN ) e*= -1;
 #ifdef ANTISYMMETRIC
     if( x == NX-1 && dir == XUP ) e*= -1;
-    if( t == NT-1 && dir == TUP ) e*= -1;
     if( x == 0 && dir == XDN ) e*= -1;
-    if( t == 0 && dir == TDN ) e*= -1;
 #endif
     return e;
 }
@@ -726,7 +726,7 @@ int find_config_sign(){
     int t1 = tdir(t, dir), x1= xdir(x, dir);
     while( t1 != t || x1 != x ){
       dir = diraclink[t1][x1];
-      sign *= linksign(t1,x1,dir);
+      loop_sign *= linksign(t1,x1,dir);
       checked[t1][x1] = 1;
       t1 = tdir(t1, dir), x1 = xdir(x1, dir);
     }

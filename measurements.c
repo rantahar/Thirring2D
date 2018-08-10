@@ -269,8 +269,10 @@ void measure_propagator(){
   double j[NT];
   double c[NT];
   //double q[NT];
+  double boson[NT];
   for( int t1=0; t1<NT; t1++){
     prop[t1]=0; j[t1] = 0; c[t1]=0; //q[t1] = 0;
+    boson[t1] = 0;
   }
 
   /*for( int t1=0;t1<NT;t1++) for( int x1=0;x1<NX;x1++) {
@@ -305,6 +307,7 @@ void measure_propagator(){
       }*/
 
       for( int t2=0; t2<NT; t2++) prop[(t2-t1+NT)%NT] += propagator[t2][x1];
+      for( int t2=0; t2<NT; t2++) boson[(t2-t1+NT)%NT] += propagator[t2][x1]*propagator[t2][x1];
 
       j[t1] += bc_up*exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
       c[t1] += bc_up*((x1+t1)%2 ==0 ? 1:-1 )* exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
@@ -324,6 +327,7 @@ void measure_propagator(){
 
   
   //for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
+  //for( int t2=0; t2<NT; t2++) printf("Boson %d %g\n", t2, current_sign*boson[t2]/(VOLUME) );
   for( int t1=0;t1<1;t1++) printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
   for( int t1=0;t1<1;t1++)  printf("Qchi %d %g\n", t1, current_sign*c[t1]/2 );
   //for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, current_sign*q[t1] );
