@@ -1,5 +1,5 @@
 /****************************************************************
- * Simulate the thirring model using the fermion bag algorithm 
+ * Calculate observables in the 2D Thirring model. 
  * (arXiv:0910.5736). The mass term is represented as a field of 
  * monomers (occupied sites) and the four fermion term is  
  * represented as dimers (occupied links). 
@@ -204,7 +204,6 @@ int n_legal_links_after_removing(int t1, int x1, int t2, int x2){
 #if NX==2
   if(x2==xdir(x1,1)) n_new += 1;
 #endif
-  //printf("nl %d nn %d\n",n_legalemptylinks,n_new);
   return n_legalemptylinks+n_new;
 }
 
@@ -275,15 +274,6 @@ void measure_propagator(){
     boson[t1] = 0;
   }
 
-  /*for( int t1=0;t1<NT;t1++) for( int x1=0;x1<NX;x1++) {
-   field[t1][x1]=0;
-  }
-  field[3][0]=LINK_XUP;
-  field[3][1]=LINK_XDN;
-  field[0][3]=LINK_TDN;
-  field[3][3]=LINK_TUP;
-  */
-
   double **source, **propagator;
   source = alloc_vector();
   propagator = alloc_vector();
@@ -300,18 +290,11 @@ void measure_propagator(){
       vec_zero( propagator );
       cg_propagator(propagator,source);
 
-      /*if( t1==0 && x1==0 ){
-        printf("Dinv %g\n",propagator[0][1]);
-        printf("Dinv %g\n",propagator[1][0]);
-        printf("Dinv %g\n",propagator[3][0]);
-      }*/
-
       for( int t2=0; t2<NT; t2++) prop[(t2-t1+NT)%NT] += propagator[t2][x1];
       for( int t2=0; t2<NT; t2++) boson[(t2-t1+NT)%NT] += propagator[t2][x1]*propagator[t2][x1];
 
       j[t1] += bc_up*exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
       c[t1] += bc_up*((x1+t1)%2 ==0 ? 1:-1 )* exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
-      //q[t1] += bc_up*((x1+t1)%2 ==0 ? 1:-1 )* exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
 
       j[tdn[t1]] += bc_dn*exp(-mu)* eta[tdn[t1]][x1][0]*propagator[tdn[t1]][x1];
       c[tdn[t1]] -= bc_dn*((x1+tdn[t1])%2 ==0 ? 1:-1 )* exp(-mu)* eta[tdn[t1]][x1][0]*propagator[tdn[t1]][x1];
@@ -321,16 +304,15 @@ void measure_propagator(){
     if( field[t1][x1]== LINK_TUP ) { 
       double cl = ((t1+x1)%2==0 ? 1:-1 )*2;
       c[t1] += 2*cl;
-      //q[t1] += cl;
     }
   }
 
   
-  //for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
-  //for( int t2=0; t2<NT; t2++) printf("Boson %d %g\n", t2, current_sign*boson[t2]/(VOLUME) );
+  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
+  for( int t2=0; t2<NT; t2++) printf("Boson %d %g\n", t2, current_sign*boson[t2]/(VOLUME) );
   for( int t1=0;t1<1;t1++) printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
   for( int t1=0;t1<1;t1++)  printf("Qchi %d %g\n", t1, current_sign*c[t1]/2 );
-  //for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, current_sign*q[t1] );
+  for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, current_sign*q[t1] );
   printf("Qchi2  %g\n", current_sign*c[0]*c[0]/4 );
 
   free_vector(source);
@@ -348,6 +330,7 @@ extern double fluctuation_det;
 extern int bc_sign;
 extern int fluctuation_sign;
 extern int moved_old_site, moved_new_site;
+
 /* Measure the susceptibility using a worm algorithm. Introduce 2 source monomers
  * with the weigth J (=U*NDIRS/V). Allow one to move around (produce configurations)
  * until it contacts with the the other one, remove with the appropriate weight.

@@ -1,5 +1,5 @@
 /****************************************************************
- * Simulate the thirring model using the fermion bag algorithm 
+ * Simulate the 1+1D Thirring model using the fermion bag algorithm 
  * (arXiv:0910.5736). The mass term is represented as a field of 
  * monomers (occupied sites) and the four fermion term is  
  * represented as dimers (occupied links). 
@@ -35,7 +35,7 @@ int **field;
 int n_bc_monomers;  //Numbers of links and monomers in the background
 int n_bc_links;
 
-/* Inverse of G for the backgroud config
+/* Inverse of the propagator matrix for the background config
  */
 double *Ginv;
 
@@ -178,7 +178,7 @@ void read_config(char * filename){
 
 
 
-/* Update the links and monomers
+/* Update the lists oflinks and monomers
  */
 int *legalemptylinks;
 int *legalmonomers;
@@ -374,6 +374,7 @@ int remove_link()
 
 
 
+/* A full update consists of a number of add and remove attempts */
 int update()
 {
   int changes=0;
@@ -404,19 +405,9 @@ void measure_propagator(){
   double prop[NT];
   double j[NT];
   double c[NT];
-  //double q[NT];
   for( int t1=0; t1<NT; t1++){
-    prop[t1]=0; j[t1] = 0; c[t1]=0; //q[t1] = 0;
+    prop[t1]=0; j[t1] = 0; c[t1]=0;
   }
-
-  /*for( int t1=0;t1<NT;t1++) for( int x1=0;x1<NX;x1++) {
-   field[t1][x1]=0;
-  }
-  field[3][0]=LINK_XUP;
-  field[3][1]=LINK_XDN;
-  field[0][3]=LINK_TDN;
-  field[3][3]=LINK_TUP;
-  */
 
   double **source, **propagator;
   source = alloc_vector();
@@ -434,22 +425,8 @@ void measure_propagator(){
       vec_zero( propagator );
       cg_propagator(propagator,source);
 
-      /*if( t1==0 && x1==0 ){
-        printf("prop %g\n",propagator[0][1]);
-        printf("prop %g\n",propagator[1][0]);
-        printf("prop %g\n",propagator[3][0]);
-      
-
-        printf("Dinv %g\n",Dinv[(NX*0+1)*VOLUME]);
-        printf("Dinv %g\n",Dinv[(NX*1+0)*VOLUME]);
-        printf("Dinv %g\n",Dinv[(NX*3+0)*VOLUME]);
-      }*/
-
-      //for( int t2=0; t2<NT; t2++) prop[(t2-t1+NT)%NT] += propagator[t2][x1];
-
       j[t1] += bc_up*exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
       c[t1] += bc_up*((x1+t1)%2 ==0 ? 1:-1 )* exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
-      //q[t1] += bc_up*((x1+t1)%2 ==0 ? 1:-1 )* exp(mu)*eta[t1][x1][0]*propagator[tup[t1]][x1];
 
       j[tdn[t1]] += bc_dn*exp(-mu)* eta[tdn[t1]][x1][0]*propagator[tdn[t1]][x1];
       c[tdn[t1]] -= bc_dn*((x1+tdn[t1])%2 ==0 ? 1:-1 )* exp(-mu)* eta[tdn[t1]][x1][0]*propagator[tdn[t1]][x1];
@@ -459,15 +436,13 @@ void measure_propagator(){
     if( field[t1][x1]== LINK_TUP ) { 
       double cl = ((t1+x1)%2==0 ? 1:-1 )*2;
       c[t1] += 2*cl;
-      //q[t1] += cl;
     }
   }
 
   
-  //for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
+  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
   for( int t1=0;t1<1;t1++) printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
   for( int t1=0;t1<1;t1++)  printf("Qchi %d %g\n", t1, current_sign*c[t1]/2 );
-  //for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, current_sign*q[t1] );
   printf("Qchi2  %g\n", current_sign*c[0]*c[0]/4 );
 
   free_vector(source);
@@ -480,6 +455,7 @@ extern double fluctuation_det;
 extern int bc_sign;
 extern int fluctuation_sign;
 extern int moved_old_site, moved_new_site;
+
 /* Measure the susceptibility using a worm algorithm. Introduce 2 source monomers
  * with the weigth J (=U*NDIRS/V). Allow one to move around (produce configurations)
  * until it contacts with the the other one, remove with the appropriate weight.
@@ -647,8 +623,8 @@ void print_config()
     printf(" \n");
   }
   printf(" \n");
-  //usleep(100000);
 }
+
 
 static int measurement = 0;
 void measure()
@@ -722,6 +698,7 @@ int main(int argc, char* argv[])
   printf(" Random seed %ld\n", seed );
   printf(" Start configuration %s\n", start_config );
 
+  /* Set monomer and link fields and counters */
 #ifdef WITH_MASS_MONOMERS
   m_update = m;
   m=0;
@@ -738,6 +715,8 @@ int main(int argc, char* argv[])
      eta[t][x] = malloc( 2*sizeof(int) );
     }
   }
+
+  // Set the neighbour arrays
   xup = malloc( (NX+1)*sizeof(int) );
   xdn = malloc( (NX+1)*sizeof(int) );
   tup = malloc( NT*sizeof(int) );
@@ -819,14 +798,11 @@ int main(int argc, char* argv[])
   calc_Dinv( );
 #endif
 
-  if(strcmp(start_config,"cold")!=0) {
+  if( strcmp(start_config,"cold")!=0 ) {
     printf(" Reading configuration file\n" );
     read_config(start_config);
   } else {
     printf(" Starting from a cold configuration\n" );
-    //for (int t=0; t<NT; t++) if(t%2==0) for (int x=0; x<NX; x++) {
-    //  link_on(t,x,TUP);
-    //}
   }
 
   /* Background and fluctuation matrix */
@@ -834,30 +810,6 @@ int main(int argc, char* argv[])
 #ifdef FLUCTUATION_MATRIX
   update_background( );
 #endif
-
-/*
-  double detratio= det_added_link( 0, 0, 0, 1);
-
-  printf(" %g ",detratio);
-
-  new_link(0 , 0, 1);
-
-  detratio= det_added_link( 1, 2, 1, 3);
-
-  printf(" %g ",detratio);
-*/
-
-  /*print_config();
-  int t2 = 63, x2 = 18;
-  for(int mu=0; mu<4; mu++) for(int nu=0; nu<=mu; nu++){
-    printf("  mu %d nu %d\n",mu,nu);
-    int t3,x3,t4,x4;
-    t3 = tdir(t2,mu); x3 = xdir(x2,mu);
-    t4 = tdir(t3,nu); x4 = xdir(x3,nu);
-    det_moved_monomer( t2, x2, t4, x4 );
-  }
-  exit(0);  
-*/
 
   /* and the update/measure loop */
   int changes = 0;

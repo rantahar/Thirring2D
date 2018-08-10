@@ -1,8 +1,7 @@
 /****************************************************************
- * Simulate the thirring model using the fermion bag algorithm 
- * (arXiv:0910.5736). The mass term is represented as a field of 
- * monomers (occupied sites) and the four fermion term is  
- * represented as dimers (occupied links). 
+ * Simulate the 2D Thirring model in the large coupling limit
+ * using the fermion bag algorithm (arXiv:0910.5736). Only the 
+ * dimers survive the limit and fully populate the lattice.
  *
  ****************************************************************/
 #ifdef DEBUG
@@ -21,7 +20,6 @@ int **field;
 
 /* Neighbour index arrays, to be filled at the beginning
  */
-
 int *tup,*xup,*tdn,*xdn;
 
 /* Functions for fetching neighboring coordinates */
@@ -99,13 +97,6 @@ static inline void link_off(int t, int x, int dir){
 
 
 
-
-
-
-
-
-
-
 void print_config()
 {
   for (int t=NT; t--; ) {
@@ -121,7 +112,6 @@ void print_config()
     printf(" \n");
   }
   printf(" \n");
-  //usleep(100000);
 }
 
 
@@ -138,7 +128,7 @@ void measure_charge(int *c, int *q){
 }
 
 
-n_links = VOLUME/2;
+int n_links = VOLUME/2;
 
 double measure_susceptibility_with_background( ){
   int nsteps = 0;
@@ -152,7 +142,6 @@ double measure_susceptibility_with_background( ){
       t= mersenne()*NT, x=mersenne()*NX;
     } while(field[t][x] < LINK_TUP);
   
-    //printf("STARTING susceptibility at (%d,%d)\n",t,x);
     if( field[t][x] >= LINK_TUP){
       //Replace the link with two source monomers
       int dir = field[t][x]-2;
@@ -162,35 +151,32 @@ double measure_susceptibility_with_background( ){
       field[t2][x2] = SOURCE_MONOMER;
     
       for(;;){
-        //print_config();
         nsteps++;
         int dir = mersenne()*NDIRS;
         int t3 = tdir(t2, dir), x3 = xdir(x2, dir);
       
         if( t3==t && x3==x ) {
-           // Back at the original site, turn into a link 
-           field[t][x]=0; field[t2][x2]=0;
-           link_on(t2,x2,dir);
-           break;
+          // Back at the original site, turn into a link 
+          field[t][x]=0; field[t2][x2]=0;
+          link_on(t2,x2,dir);
+          break;
 
          } else if( field[t3][x3] >= LINK_TUP ) {
-           // found a link, flip it  
-           int linkdir = field[t3][x3] - LINK_TUP;
-           int t4 = tdir(t3,linkdir), x4 = xdir(x3,linkdir);
+          // found a link, flip it  
+          int linkdir = field[t3][x3] - LINK_TUP;
+          int t4 = tdir(t3,linkdir), x4 = xdir(x3,linkdir);
 
-           field[t2][x2] = 0;
-           link_off(t3,x3,linkdir); link_on(t2,x2,dir);
-           field[t4][x4] = SOURCE_MONOMER;
+          field[t2][x2] = 0;
+          link_off(t3,x3,linkdir); link_on(t2,x2,dir);
+          field[t4][x4] = SOURCE_MONOMER;
 
-           t2 = t4; x2 = x4;
+          t2 = t4; x2 = x4;
 
-         } 
-         //for(int n=0; n<10; n++) update_dirac_background();
+        } 
       }  
     }
   }
 
-  // print_config();
   return (double)nsteps*scale_factor;
 }
 
@@ -280,7 +266,8 @@ int main(int argc, char* argv[])
   struct timeval start, end;
   double updatetime=0, measuretime = 0;
   for (i=1; i<n_loops+1; i++) {
-    //print_config();
+      /* In the infinite coupling limit dimers can never be broken, but they can be shuffled around.
+       * The only necessary update is the susceptibility measuring worm. */
 
       /* Time */
       gettimeofday(&start,NULL);

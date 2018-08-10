@@ -1,3 +1,9 @@
+/****************************************************************
+ * Simulate the 1+1D Thirring in the gauge representation using
+ * a simple metropolis update
+ *
+ ****************************************************************/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -65,6 +71,7 @@ static inline int opp_dir(int dir){
   return ( dir + ND ) % NDIRS;
 }
 
+
 double gauge_action(){
     double S = 0;
     for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) for( int dir=0; dir<ND; dir++ ) {
@@ -73,23 +80,21 @@ double gauge_action(){
     return Nf/g*S;
 }
 
+
 double complex determinant();
 void update_gauge(){
     for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) for( int dir=0; dir<ND; dir++ ) {
-        double s1 = -Nf/g*cos(A[t][x][dir]);
-        double old = A[t][x][dir];
-        double d1 = fabs(creal(determinant()));
-        A[t][x][dir] = 2*M_PI*mersenne()-M_PI;
-        double s2 = -Nf/g*cos(A[t][x][dir]);
-        double d2 = fabs(creal(determinant()));
-        double edS = exp(-s2+s1)*d2/d1;
-        //printf("New A=%f at (%d,%d), direction %d, exp(-deltaS)=%g\n", A[t][x][dir],t,x,dir, edS);
+      double s1 = -Nf/g*cos(A[t][x][dir]);
+      double old = A[t][x][dir];
+      double d1 = fabs(creal(determinant()));
+      A[t][x][dir] = 2*M_PI*mersenne()-M_PI;
 
-        if( mersenne() < edS ) {
-          //printf("Accepted\n");
-        } else {
-            A[t][x][dir] = old;
-        }
+      double s2 = -Nf/g*cos(A[t][x][dir]);
+      double d2 = fabs(creal(determinant()));
+      double edS = exp(-s2+s1)*d2/d1;
+      
+      if( mersenne() > edS )
+        A[t][x][dir] = old;
     }
 }
 
@@ -169,14 +174,6 @@ double complex determinant(){
     ipiv = malloc( n*sizeof(int) ); 
     double complex det = 1;
     
-    /*for( int i=0;i<VOLUME;i++) { for( int j=0;j<VOLUME;j++){
-        printf(" %4.2f ", creal( M[i+j*VOLUME] ) );
-      }
-      printf("\n");
-    }
-    printf("\n");
-    */
-    
     LAPACK_zgetrf( &n, &n, M, &n, ipiv, &info );
     
     if( info > 0 ) printf("error %d\n", info);
@@ -185,22 +182,6 @@ double complex determinant(){
       det *= M[i*n+i];
       if( ipiv[i] != i+1 ) det*=-1; 
     }
-    
-    /*
-    int lwork=n*n;
-    _Complex double *work;
-    work = malloc( lwork*sizeof(_Complex double) );
-
-    LAPACK_zgetri(&n, M, &n, ipiv, work, &lwork, &info);
-        free(work);
-
-    for( int i=0;i<VOLUME;i++) { for( int j=0;j<VOLUME;j++){
-        printf(" %4.2f ", creal( M[i+j*VOLUME] ) );
-      }
-      printf("\n");
-    }
-    printf("\n");
-    */
     
     free(M);
     free(ipiv);
@@ -334,9 +315,6 @@ int main(void){
 
   for (int i=1; i<n_loops+1; i++) {
     update_gauge();
-    
-    //printf("Updated gauge\n");
-    //printf("Action %g\n", gauge_action());
     
     if((i%n_measure)==0){
       /* Statistics */

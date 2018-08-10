@@ -271,7 +271,6 @@ void cg_MdM( double **inv, double **source )
   vec_assign( p, r );
   double rr_old = vec_dot( r, r );
   double rr_init = rr_old;
-  //printf("CG: %d  %g \n",0,rr);
 
   if( rr_old < CG_ACCURACY ){
     return ;
@@ -288,7 +287,6 @@ void cg_MdM( double **inv, double **source )
     vec_dmul_add( r, r, MMp, -a );
 
     rr = vec_dot( r, r );
-    //printf("CG: %d  %g %g %g %g\n",k,rr,rr_old,pMp,a);
     if( rr < CG_ACCURACY )
       break;
     if( rr/rr_init > 1e10 ) {
@@ -306,7 +304,6 @@ void cg_MdM( double **inv, double **source )
   free_vector(p);
   free_vector(Mp);
   free_vector(MMp);
-  //printf("CG: %d %g %g %g %g\n",k,rr/rr_init,rr_init,pMp,a);
 }
 
 
@@ -320,7 +317,6 @@ void cg_propagator( double **propagator, double **source )
   cg_MdM( propagator, tmp );
   //fM( tmp, propagator ); //To test cg
   //vec_dmul_add( tmp, tmp, source, -1 );
-  //printf(" test CG %g \n", vec_dot( tmp, tmp ));
   free_vector(tmp);
 }
 
@@ -383,42 +379,7 @@ void fM_occupied(double *chi, double *psi )
   }
 }
 
-/*
-void fM_occupied(double *chi, double *psi )
-{
-  static double expmu, expmmu;
-  static int init=1;
-  if(init){
-    expmu = exp(mu);
-    expmmu = exp(-mu);
-  }
-  for (int t=0; t<VOLUME; t++) chi[t] = psi[t];
-  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
-    chi[t*NX+x] = 0;
-    int t2=tup[t];
-    if( t2 > t ) chi[t*NX+x] -= 0.5 * expmmu * psi[t2*NX+x] ;
-    else chi[t*NX+x] += 0.5 * expmmu * psi[t2*NX+x] ;
-    
-    t2 = tdn[t];
-    if( t2 > t ) chi[t*NX+x] -= 0.5 * expmu * psi[t2*NX+x] ;
-    else chi[t*NX+x] += 0.5 * expmu * psi[t2*NX+x] ;
-    
-    int x2 = xup[x];
-    if( x2 > x ) chi[t*NX+x] -= 0.5 * eta[t][x][1] * psi[t*NX+x2] ;
-    else chi[t*NX+x] += 0.5 * eta[t][x][1] * psi[t*NX+x2] ;
-    
-    x2 = xdn[x];
-    if( x2 > x ) chi[t*NX+x] -= 0.5 * eta[t][x][1] * psi[t*NX+x2] ;
-    else chi[t*NX+x] += 0.5 * eta[t][x][1] * psi[t*NX+x2] ;
-    
-    if( field[t][x] != 0 ) {   //An additional row and column to remove the
-                               //determinant at (t,x)
-      chi[t*NX+x] -= psi[VOLUME+t*NX+x];
-      chi[VOLUME+t*NX+x] = psi[t*NX+x];
-    }
-  }
-}
-*/
+
 
 void fM_occupied_sq(double *chi, double *psi )
 {
@@ -467,7 +428,6 @@ int cg_MdM_occupied( double *psi, double *source )
   double rr_old = 0;
   for (int t=0; t<VOLUME; t++) rr_old+=r[t]*r[t];
   double rr_init = rr_old;
-  //printf("CG: %d  %g \n",0,rr_old);
 
   int k;
   for( k = 1; k < CG_MAX_ITER; k++ )
@@ -483,7 +443,6 @@ int cg_MdM_occupied( double *psi, double *source )
 
     rr=0;
     for (int t=0; t<VOLUME; t++) rr+=r[t]*r[t];
-    //printf("CG: %d  %g %g %g %g\n",k,rr,rr_old,pMp,a);
     if( rr < CG_ACCURACY ){
       fM_occupied( psi, inv );
       return(0);
@@ -499,7 +458,6 @@ int cg_MdM_occupied( double *psi, double *source )
     rr_old = rr;
   }
   
-  //printf("CG: %d  %g %g %g %g\n",k,rr,rr_old,pMp,a);
   return(1);
 }
 
