@@ -1,7 +1,10 @@
 /****************************************************************
- * Brute force test of the Thirring model simulation algorithm,
+ * A brute force integration of the partition function for the
+ * 2D Thirring model. Usefull for testing the correctness
+ * of a simulation algorithm.
+ * 
  * Go through all possible configurations and calculate the
- * determinant for each.
+ * determinant and measurables for each one.
  *
  ****************************************************************/
 
@@ -28,7 +31,7 @@ int **field;
 int n_bc_monomers;  //Numbers of links and monomers in the background
 int n_bc_links;
 
-/* Inverse of G for the backgroud config
+/* Inverse of G for the background config
  */
 double *Ginv;
 
@@ -71,13 +74,13 @@ static inline void link_on(int t, int x, int dir){
   }
 }
 
-/* Turn a monomer on at a link */
+/* Turn two monomer on around a link */
 static inline void monomer_on(int t, int x, int t2, int x2){
   if ( field[t][x] == 0 && field[t2][x2] == 0 ){
     field[t][x] = MONOMER;
     field[t2][x2] = MONOMER;
 #ifdef DEBUG
-    printf("Turned on link (%d,%d) (%d,%d)\n",t,x,t2,x2);
+    printf("Turned on monomers (%d,%d) and (%d,%d)\n",t,x,t2,x2);
 #endif
   } else {
     printf("Link already occupied\n");
@@ -102,7 +105,7 @@ static inline void link_off(int t, int x, int dir){
 }
 
 
-/* Check if it's legal to add a link or monomer */
+/* Check if we're allowed to add a link or monomer */
 static inline int is_legal(int t, int x, int nu){
   int t2,x2;
   t2 = tdir(t,nu); x2 = xdir(x,nu);
@@ -262,7 +265,7 @@ void calc_Dinv( )
 
 
 /* Invert the matrix of propagators between occupied sites
- * Assing the current configuration as the background
+ * Assign the current configuration as the background
  */
 double previous_accepted_det = 1;
 double previous_det = 1;
@@ -320,7 +323,7 @@ void update_background( )
     LAPACK_dgetrf( &n, &n, Ginv, &n, ipiv, &info );
     LAPACK_dgetrf( &n, &n, Ginv_odd, &n, ipiv_o, &info );
 
-    /* determinant from LU ( for debugging ) */
+    /* determinant from LU */
     for(int i=0; i<n; i++) {
       if(ipiv[i]==i+1) { det_e *= Ginv[i*n+i];}
       else { det_e *= -Ginv[i*n+i]; }
@@ -374,8 +377,7 @@ void update_linklists(){
 
 
 
-
-/* Go through all possible configurations */
+/* Print a configuration */
 void print_config()
 {
   for (int t=0; t<NT; t++) {
@@ -395,7 +397,7 @@ void print_config()
   //usleep(100000);
 }
 
-/* Propagator
+/* Measure the fermion and chiral currents (j and cj) and the chiral charge squared (cs)
  */
 void measure_charge( double * j, double * cj, double * cs){ 
 
@@ -449,6 +451,8 @@ static double j[VOLUME/2+1][VOLUME+1];
 static double cj[VOLUME/2+1][VOLUME+1];
 static double cs[VOLUME/2+1][VOLUME+1];
 
+
+/* Go through all possible configurations */
 void update( int i0 )
 {
   
@@ -457,14 +461,12 @@ void update( int i0 )
   ZLabs[n_links][n_monomers] += fabs(det_save);
 
   double jm=0, cjm=0, csm=0;
-  //if(abs(det_save) > 0 && n_monomers==0){
-    //print_config(); 
-    measure_charge(&jm,&cjm,&csm);
-  //}
+  measure_charge(&jm,&cjm,&csm);
   j[n_links][n_monomers] += det_save*jm;
   cj[n_links][n_monomers] += det_save*cjm;
   cs[n_links][n_monomers] += det_save*csm;
 
+  /* Starting from top left, set each site to each possible state */
   for( int i=i0; i< VOLUME ; i++ ) {
     int t = (i%VOLUME)/NT, x = i%NT;
     if(field[t][x]==0){
@@ -475,6 +477,7 @@ void update( int i0 )
           update_linklists();
           update_background();
 
+          /* Recursively update the rest of the lattice */
           update(i);
           link_off(t,x,nu);
         }
@@ -589,7 +592,7 @@ int main(int argc, char* argv[])
 #endif
 
 
-  /* fill the staggered eta array */
+  /* Fill the staggered eta array */
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
     eta[t][x][1] = 1;
     if( x%2 == 0 ){
@@ -603,7 +606,7 @@ int main(int argc, char* argv[])
   }
 
   
-  /* fill monomers and links */
+  /* Fill monomers and links */
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
     field[t][x] = 0;
   }
@@ -615,24 +618,14 @@ int main(int argc, char* argv[])
 
   update_linklists();
 
-  /* calculate propagators */
+  /* Calculate propagators */
   calc_Dinv( );
   det_save = 1;
   
+  /* Set the start configuration as the background configuration */
   update_background( );
 
-  //field[3][0]=XUP+2;
-  //field[3][1]=XDN+2;
-  //field[0][3]=TDN+2;
-  //field[3][3]=TUP+2;
-
-  //print_config();
-
-  //double t1,t2,t3;
-  //measure_charge(&t1,&t2,&t3);
-  //return 1;
-
-  /* and the update/measure loop */
+  /* Initialize measurements */
   for(int nl=0; nl<VOLUME/2+1; nl++ ) for(int nm=0; nm<VOLUME+1; nm++ ){
     ZL[nl][nm] = 0;
     ZLabs[nl][nm] = 0;
@@ -641,6 +634,7 @@ int main(int argc, char* argv[])
     cs[nl][nm] = 0;
   }
 
+  /* And finally run the integral (starting from site 0) */
   update(0);
   
   for(int nl=0; nl<VOLUME/2+1; nl++ ) for(int nm=0; nm<VOLUME+1; nm++ )
