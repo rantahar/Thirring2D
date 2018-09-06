@@ -11,3 +11,39 @@ authors:
     orcid:  https://orcid.org/0000-0002-0072-7707
     
 doi: 10.5281/zenodo.1408845
+
+references:
+  - type: article
+    authors:
+      - family-names: Ayyar
+        given-names: Venkitesh
+      - family-names: Chandrasekharan
+        given-names: Shailesh
+      - family-names: Rantaharju
+        given-names: Jarno
+    title: "Benchmark results in the 2D lattice Thirring model with a chemical potential"
+    year: 2018
+    journal: Phys. Rev.
+    volume: D97
+    doi: "10.1103/PhysRevD.97.054501"
+  - type: article
+    authors:
+      - family-names: Chandrasekharan
+        given-names: Shailesh
+    title: "The Fermion bag approach to lattice field theories"
+    year: 2010
+    journal: Phys. Rev.
+    volume: D82
+    doi: "10.1103/PhysRevD.82.025007"
+  - type: article
+    authors:
+      - family-names: Matsumoto
+        initials: M.
+      - family-names: Nishimura
+        initials: T.
+    title: "Mersenne Twister: A 623-Dimensionally Equidistributed Uniform"
+    year: 1998
+    journal: ACM Transactions on Modeling and Computer Simulation
+    volume: 8
+    issue: 1
+    pages: 3-30
