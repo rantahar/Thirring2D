@@ -318,7 +318,7 @@ int find_sign(int t0, int x0, int t, int x){
 //Update the Dirac background using a worm update
 //Can also measure the fermion propagator
 int update_dirac_background(){
-  int propagator[NT];
+  //int propagator[NT];
   for(int t=0;t<NT;t++) propagator[t]=0;
 
   //Pick a site
@@ -341,7 +341,7 @@ int update_dirac_background(){
     for(int i=0;;i++) {
       //Also calculate the propagator between the two defects
       //This is the fermion propagator
-      propagator[ (t-t0+NT)%NT ]+=find_sign(t0,x0,t,x);
+      //propagator[ (t-t0+NT)%NT ]+=find_sign(t0,x0,t,x);
 
       //Pick a random direction to create a link
       int dir = mersenne()*NDIRS;
