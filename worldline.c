@@ -779,7 +779,7 @@ double measure_susceptibility_with_background( ){
 /* Figure out the sign of the current
    configuration. In the most general
    case we go over all fermion loops. */
-int find_config_sign(){
+int count_negative_loops(){
   int sector = 0;
 
   // Mark the checked sites to avoid double counting
@@ -958,7 +958,7 @@ int main(int argc, char* argv[])
 
       gettimeofday(&start,NULL);
 
-      int sector = find_config_sign();
+      int sector = count_negative_loops();
       sectors[sector] += 1;
       int sign = 1-(sector%2)*2;
       sum_sign += sign;
