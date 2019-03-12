@@ -319,7 +319,7 @@ int find_sign(int t0, int x0, int t, int x){
 //Can also measure the fermion propagator
 int update_dirac_background(){
   //int propagator[NT];
-  for(int t=0;t<NT;t++) propagator[t]=0;
+  //for(int t=0;t<NT;t++) propagator[t]=0;
 
   //Pick a site
   int t= mersenne()*NT, x=mersenne()*NX;
