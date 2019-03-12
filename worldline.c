@@ -39,6 +39,12 @@ double *psi,*chi;
  */
 int *tup,*xup,*tdn,*xdn;
 
+/* Utility, print error and exit */
+void errormessage( char * message ){
+  fprintf( stderr, message );
+  exit(1);
+}
+
 /* Functions for fetching neighboring coordinates */
 static inline int tdir(int t, int dir){
   if( dir == TUP ) return tup[t];
@@ -68,8 +74,7 @@ static inline void link_on(int t, int x, int dir){
     printf("Turned on link (%d,%d,%d) (%d,%d,%d)\n",t,x,dir,t2,x2,opp_dir(dir));
 #endif
   } else {
-    printf("Link already occupied\n");
-    exit(1);
+    errormessage("Link already occupied\n");
   }
 }
 
@@ -84,8 +89,7 @@ static inline void monomers_on(int t, int x, int dir){
     printf("Turned on monomers at (%d,%d) (%d,%d)\n",t,x,t2,x2);
 #endif
   } else {
-    printf("Sites already occupied\n");
-    exit(1);
+    errormessage("Sites already occupied\n");
   }
 }
 
@@ -100,8 +104,7 @@ static inline void link_off(int t, int x, int dir){
     printf("Turned off link (%d,%d) (%d,%d)\n",t,x,t2,x2);
 #endif
   } else {
-    printf("Link already off\n");
-    exit(1);
+    errormessage("Link already off\n");
   }
 }
 
@@ -116,8 +119,7 @@ static inline void monomers_off(int t, int x, int dir){
     printf("Turned off monomers at (%d,%d) (%d,%d)\n",t,x,t2,x2);
 #endif
   } else {
-    printf("Monomer already off\n");
-    exit(1);
+    errormessage("Monomer already off\n");
   }
 }
 
@@ -561,7 +563,7 @@ int move_source_monomer(int *ts0, int *xs0, int dir){
   
   // Check correct use
   if( field[t][x] != SOURCE_MONOMER ){
-    exit(1);
+    errormessage("Starting point of move_source_monomer is not a source monomer\n");
   }
   
   // This algorithm is only used when the neighbouring site
@@ -811,6 +813,33 @@ int count_negative_loops(){
 
 
 
+/* Ask for parameter */
+void get_int( char * name, int * dest ){
+  printf(" %s :", name);
+  if( scanf("%d", dest) == 0 ){
+    char message[60];
+    sprintf(message, "Missing parameter %s\n", name);
+    errormessage(message);
+  }
+}
+
+void get_double( char * name, double * dest ){
+  printf(" %s :", name);
+  if( scanf("%lf", dest) == 0 ){
+    char message[60];
+    sprintf(message, "Missing parameter %s\n", name);
+    errormessage(message);
+  }
+}
+
+void get_long( char * name, long * dest ){
+  printf(" %s :", name);
+  if( scanf("%lf", dest) == 0 ){
+    char message[60];
+    sprintf(message, "Missing parameter %s\n", name);
+    errormessage(message);
+  }
+}
 
 
 /* Main function
@@ -825,33 +854,20 @@ int main(int argc, char* argv[])
   long seed;
 
   /* Read in the input */
-  printf(" Number of updates : ");
-  scanf("%d",&n_loops);
+  get_int("Number of updates", &n_loops);
+  get_int("Updates / measurement", &n_measure);
+  get_int("Average over", &n_average);
 
-  printf(" Updates / measurement : ");
-  scanf("%d",&n_measure);
+  get_double("mass", &m);
+  get_double("U", &U);
+  get_double("mu", &mu);
+
+  get_long("Random seed", &seed);
+
+  get_int("maximum size of fluctuation matrix", &max_changes);
   
-  printf(" Average over : ");
-  scanf("%d",&n_average);
-  printf("%d\n",n_average);
-
-  printf(" m : ");
-  scanf("%lf",&m);
-
-  printf(" U : ");
-  scanf("%lf",&U);
-
-  printf(" mu : ");
-  scanf("%lf",&mu);
-
-  printf(" Random number : ");
-  scanf("%ld",&seed);
-  seed_mersenne( seed );
-  
-  printf(" maximum size of fluctuation matrix : ");
-  scanf("%d",&max_changes);
-
   /* "Warm up" the rng generator */
+  seed_mersenne( seed );
   for (i=0; i<543210; i++) mersenne();
 
   printf(" \n++++++++++++++++++++++++++++++++++++++++++\n");
