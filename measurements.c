@@ -312,7 +312,7 @@ void measure_propagator(){
   for( int t2=0; t2<NT; t2++) printf("Boson %d %g\n", t2, current_sign*boson[t2]/(VOLUME) );
   for( int t1=0;t1<1;t1++) printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
   for( int t1=0;t1<1;t1++)  printf("Qchi %d %g\n", t1, current_sign*c[t1]/2 );
-  for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, current_sign*q[t1] );
+  //for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, current_sign*q[t1] );
   printf("Qchi2  %g\n", current_sign*c[0]*c[0]/4 );
 
   free_vector(source);

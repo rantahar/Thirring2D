@@ -73,16 +73,18 @@ static inline void link_on(int t, int x, int dir){
   }
 }
 
-/* Turn a monomer on at a link */
-static inline void monomer_on(int t, int x, int t2, int x2){
+/* Add two monomers */
+static inline void monomers_on(int t, int x, int dir){
+  int t2 = tdir(t, dir);
+  int x2 = xdir(x, dir);
   if ( field[t][x] == 0 && field[t2][x2] == 0 ){
     field[t][x] = MONOMER;
     field[t2][x2] = MONOMER;
 #ifdef DEBUG
-    printf("Turned on link (%d,%d) (%d,%d)\n",t,x,t2,x2);
+    printf("Turned on monomers at (%d,%d) (%d,%d)\n",t,x,t2,x2);
 #endif
   } else {
-    printf("Link already occupied\n");
+    printf("Sites already occupied\n");
     exit(1);
   }
 }
@@ -99,6 +101,22 @@ static inline void link_off(int t, int x, int dir){
 #endif
   } else {
     printf("Link already off\n");
+    exit(1);
+  }
+}
+
+/* Remove two monomers */
+static inline void monomers_off(int t, int x, int dir){
+  int t2 = tdir(t, dir);
+  int x2 = xdir(x, dir);
+  if ( field[t][x] == MONOMER && field[t2][x2] == MONOMER ){
+    field[t][x] = 0;
+    field[t2][x2] = 0;
+#ifdef DEBUG
+    printf("Turned off monomers at (%d,%d) (%d,%d)\n",t,x,t2,x2);
+#endif
+  } else {
+    printf("Monomer already off\n");
     exit(1);
   }
 }
@@ -120,13 +138,13 @@ int update_link_at(int s)
 {
   int success = 0;
   int t = s%NT, x = s/NT;
+  int dir = field[t][x]-2;
+  int t2 = tdir(t,dir), x2 = xdir(x,dir);
 
   if( field[t][x] >= LINK_TUP ) {
     /* Remove link at t,x */
     //Note the factor of 4 from the dirac operator,
     //each dirac link has 0.5
-    int dir = field[t][x]-2;
-    int t2 = tdir(t,dir), x2 = xdir(x,dir);
     if( mersenne() < 1/(4*U) ) {
       link_off(t,x,dir);
       /* Replace with 2 opposing arrows */
@@ -135,7 +153,7 @@ int update_link_at(int s)
       n_links--;
       success = 1;
     }
-  } else {
+  } else if( field[t][x] == 0 && field[t2][x2] == 0 )  {
     /* No link, add if possible */
     int dir = diraclink[t][x];
     int t2 = tdir(t,dir), x2 = xdir(x,dir);
@@ -161,6 +179,54 @@ int update_link_at(int s)
 int update_link()
 {
   return update_link_at( (int) (mersenne()*VOLUME) );
+}
+
+
+/* Try to add or remove a link at a given site */
+int update_monomers_at(int s, int dir)
+{
+  int success = 0;
+  int t = s%NT, x = s/NT;
+
+  int t2 = tdir(t, dir), x2 = xdir(x, dir);
+
+  if( field[t][x] == MONOMER && field[t2][x2] == MONOMER ) {
+    /* Remove monomers at t,x and t2, x2 */
+    //Note the factor of 4 from the dirac operator,
+    //each dirac link has 0.5
+    if( mersenne() < 1/(4*m*m) ) {
+      monomers_off(t,x,dir);
+      /* Replace with 2 opposing arrows */
+      diraclink[t][x] = dir;
+      diraclink[t2][x2] = opp_dir(dir);
+      n_monomers-=2;
+      success = 1;
+    }
+  } else if( field[t][x] == 0 && field[t2][x2] == 0 ) {
+    /* No monomers or links, add if possible */
+    int dir = diraclink[t][x];
+    int t2 = tdir(t,dir), x2 = xdir(x,dir);
+    int nu = diraclink[t2][x2];
+
+    if( dir<NDIRS && dir == opp_dir(nu) ){
+      //Two opposing arrows, easy to add
+      //Note the factor of 4 from the dirac operator,
+      //each dirac link has 0.5
+      if( mersenne() < 4*m*m ) {
+        monomers_on(t,x,dir);
+        diraclink[t][x] = NDIRS;
+        diraclink[t2][x2] = NDIRS;
+        n_monomers+=2;
+        success = 1;
+      }
+    }
+  }
+  return success;
+}
+
+int update_monomer()
+{
+  return update_monomers_at( (int) (mersenne()*VOLUME), (int) (mersenne()*NDIRS)  );
 }
 
 
@@ -350,8 +416,11 @@ int update()
 
   update_dirac_background();
 
-  int n_update = NX;  
-  for(int i=0;i<n_update;i++) update_link();
+  int n_update = NX*NT;
+  for(int i=0;i<n_update;i++) {
+    update_link();
+    update_monomer();
+  }
   return changes;
 }
 
@@ -375,7 +444,7 @@ void print_config()
       if(field[t][x]==LINK_XUP) { empty = 0; printf(" --"); }
       if(field[t][x]==LINK_TDN) { empty = 0; printf(" | "); }
       if(field[t][x]==LINK_XDN) { empty = 0; printf("-- "); }
-      if(field[t][x]==SOURCE_MONOMER) { empty = 0; printf(" x "); } //A source monomer
+      if(field[t][x]==SOURCE_MONOMER) { empty = 0; printf(" x "); }
       if(diraclink[t][x]==10) printf(" . ");
       if(diraclink[t][x]==TUP) printf(" ^ ");
       if(diraclink[t][x]==TDN) printf(" v ");
@@ -695,7 +764,7 @@ double measure_susceptibility_with_background( ){
 
   return (double)nsteps*scale_factor;
   #else
-  return 0;
+  return NAN;
   #endif
 }
 
@@ -711,7 +780,7 @@ double measure_susceptibility_with_background( ){
    configuration. In the most general
    case we go over all fermion loops. */
 int find_config_sign(){
-  int sign = 1;
+  int sector = 0;
 
   // Mark the checked sites to avoid double counting
   int checked[NT][NX];
@@ -730,10 +799,14 @@ int find_config_sign(){
       checked[t1][x1] = 1;
       t1 = tdir(t1, dir), x1 = xdir(x1, dir);
     }
-    //loop closed
-    sign *=-loop_sign;
+
+    if( loop_sign > 0 ){
+      sector += 1;
+    }
+
   }
-  return sign;
+  
+  return sector;
 }
 
 
@@ -865,6 +938,9 @@ int main(int argc, char* argv[])
   double sum_susc = 0;
   double sum_susc_wb = 0;
   int sum_sign=0;
+  int sectors[MAX_SECTOR];
+  for(i=0; i<MAX_SECTOR; i++)
+    sectors[i] = 0;
 
   struct timeval start, end;
   double updatetime=0, measuretime = 0;
@@ -882,7 +958,9 @@ int main(int argc, char* argv[])
 
       gettimeofday(&start,NULL);
 
-      int sign = find_config_sign();
+      int sector = find_config_sign();
+      sectors[sector] += 1;
+      int sign = 1-(sector%2)*2;
       sum_sign += sign;
       //measure_propagator(); //This includes an invertion and therefore takes time
 
@@ -896,7 +974,8 @@ int main(int argc, char* argv[])
       sum_q += sign*q;
       sum_q2 += sign*q*q; 
 
-      sum_susc_wb += sign*measure_susceptibility_with_background();
+      if( m == 0 )
+        sum_susc_wb += sign*measure_susceptibility_with_background();
       gettimeofday(&end,NULL);
       measuretime += 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
 
@@ -910,8 +989,13 @@ int main(int argc, char* argv[])
         printf("CHARGE %g %g \n", (double)sum_charge/n_average, (double)sum_c2/n_average);
         printf("QCHI %g %g \n", (double)sum_q/n_average, (double)sum_q2/n_average);
         //printf("Susc %g \n", (double)sum_susc/n_average);
-        printf("SUSCEPTIBILITY %g \n", (double)sum_susc_wb/n_average);
+        if( m == 0 )
+          printf("SUSCEPTIBILITY %g \n", (double)sum_susc_wb/n_average);
         printf("SIGN %g\n", (double)sum_sign/n_average);
+        for(int s=0; s<MAX_SECTOR; s++){
+          printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
+          sectors[s] = 0;
+        }
 
         sum_monomers = 0; sum_links = 0; sum_charge = 0;
         sum_c2 = 0; sum_q = 0; sum_q2 = 0; sum_susc = 0;

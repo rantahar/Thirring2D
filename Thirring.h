@@ -11,8 +11,8 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 16
-#define NX 12
+#define NT 64
+#define NX 64
 
 #define ND 2
 #define NDIRS (2*ND)
@@ -24,9 +24,9 @@
 
 #define VOLUME (NT*NX)
 
-//#define ANTISYMMETRIC //Antisymmetric boundaries
+#define ANTISYMMETRIC //Antisymmetric boundaries
 //#define SYMMETRIC     //implemented in Thirring_hop
-#define OPENX       //open in space, (anti)symmetric in time
+//#define OPENX       //open in space, (anti)symmetric in time
 
 
 /* Enumerate possible values for a field */
@@ -47,6 +47,8 @@
 #define FLUCTUATION_MATRIX
 #define WITH_MASS_MONOMERS
 #define PROPAGATOR_MATRIX
+
+#define MAX_SECTOR 100
 
 /* Functions in vec_ops.c */
 void vec_zero( double **a );
