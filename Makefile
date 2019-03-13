@@ -1,6 +1,6 @@
 
 CC=gcc 
-CFLAGS=-march=native -Wall -Wextra -std=c99 -O3 -llapack -lm 
+CFLAGS= -g -march=native -Wall -Wextra -std=c99 -O0 -llapack -lm 
 
 DEPS=Makefile Thirring.h mersenne.h
 

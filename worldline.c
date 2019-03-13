@@ -140,10 +140,10 @@ int update_link_at(int s)
 {
   int success = 0;
   int t = s%NT, x = s/NT;
-  int dir = field[t][x]-2;
-  int t2 = tdir(t,dir), x2 = xdir(x,dir);
 
   if( field[t][x] >= LINK_TUP ) {
+    int dir = field[t][x] - LINK_TUP;
+    int t2 = tdir(t,dir), x2 = xdir(x,dir);
     /* Remove link at t,x */
     //Note the factor of 4 from the dirac operator,
     //each dirac link has 0.5
@@ -155,7 +155,7 @@ int update_link_at(int s)
       n_links--;
       success = 1;
     }
-  } else if( field[t][x] == 0 && field[t2][x2] == 0 )  {
+  } else if( field[t][x] == 0 ) {
     /* No link, add if possible */
     int dir = diraclink[t][x];
     int t2 = tdir(t,dir), x2 = xdir(x,dir);
@@ -184,19 +184,18 @@ int update_link()
 }
 
 
-/* Try to add or remove a link at a given site */
+/* Try to add or remove monomers at a given site */
 int update_monomers_at(int s, int dir)
 {
   int success = 0;
   int t = s%NT, x = s/NT;
-
   int t2 = tdir(t, dir), x2 = xdir(x, dir);
 
   if( field[t][x] == MONOMER && field[t2][x2] == MONOMER ) {
     /* Remove monomers at t,x and t2, x2 */
     //Note the factor of 4 from the dirac operator,
     //each dirac link has 0.5
-    if( mersenne() < 1/(4*m*m) ) {
+    if( mersenne() < 1.0/(4*m*m) ) {
       monomers_off(t,x,dir);
       /* Replace with 2 opposing arrows */
       diraclink[t][x] = dir;
@@ -206,11 +205,10 @@ int update_monomers_at(int s, int dir)
     }
   } else if( field[t][x] == 0 && field[t2][x2] == 0 ) {
     /* No monomers or links, add if possible */
-    int dir = diraclink[t][x];
     int t2 = tdir(t,dir), x2 = xdir(x,dir);
-    int nu = diraclink[t2][x2];
+    int dir2 = diraclink[t2][x2];
 
-    if( dir<NDIRS && dir == opp_dir(nu) ){
+    if( dir == diraclink[t][x] && dir == opp_dir(dir2) ){
       //Two opposing arrows, easy to add
       //Note the factor of 4 from the dirac operator,
       //each dirac link has 0.5
@@ -241,9 +239,9 @@ int add_link_at(int t, int x)
 
     int dir = diraclink[t][x];
     int t2 = tdir(t,dir), x2 = xdir(x,dir);
-    int nu = diraclink[t2][x2];
+    int dir2 = diraclink[t2][x2];
 
-    if( dir<NDIRS && nu == opp_dir(dir) ){
+    if( dir<NDIRS && dir2 == opp_dir(dir) ){
       //Two opposing arrows, easy to add
       //Note the factor of 4 from the dirac operator,
       //each dirac link has 0.5
@@ -315,57 +313,116 @@ int find_sign(int t0, int x0, int t, int x){
 
 
 
+/* Find a link pointing at a given site */
+int find_link_pointing_at( int t, int x ){
+  int t2,x2, dir;
+  for( dir = 0; dir<NDIRS; dir++ ) {
+    t2 = tdir(t, dir), x2 = xdir(x, dir);
+    if( diraclink[t2][x2] == opp_dir(dir) ){
+      //Found a site pointing to t,x
+      break;
+    }
+  }
+  return dir;
+}
+
+
+
+// A step in the worm update that updates monomers
+void dirac_worm_add_monomer( int *t, int *x, int dir ){
+  //printf("Before\n");
+  //print_config();
+  int t2, x2;
+  double p;
+  t2 = tdir(*t, dir), x2 = xdir(*x, dir);
+  if( mersenne() < 0.5 ){
+    int removeddir = diraclink[t2][x2];
+    if( removeddir == opp_dir(dir) ){
+      p = 2.0*m;
+      if( removeddir == TUP ) p *= exp(-mu);
+      if( removeddir == TDN ) p *= exp(mu);
+      if( mersenne() < p ){
+        field[*t][*x] = MONOMER;
+        diraclink[*t][*x] = NDIRS;
+        diraclink[t2][x2] = 10;
+        *t=t2; *x=x2;
+        n_monomers += 1;
+      }
+    }
+  } else {
+    if( field[t2][x2] == MONOMER ){
+      p = 0.5/m;
+      if( dir == TUP ) p *= exp(mu);
+      if( dir == TDN ) p *= exp(-mu);
+      if( mersenne() < p ){
+        field[t2][x2] = 0;
+        diraclink[*t][*x] = dir;
+        diraclink[t2][x2] = 10;
+        *t=t2; *x=x2;
+        n_monomers -= 1;
+      }
+    }
+  }
+  //printf("After\n");
+  //print_config();
+}
+
+
 //Update the Dirac background using a worm update
 //Can also measure the fermion propagator
 int update_dirac_background(){
   //int propagator[NT];
   //for(int t=0;t<NT;t++) propagator[t]=0;
+  int t0, x0, t, x, dir;
+  double p;
 
   //Pick a site
-  int t= mersenne()*NT, x=mersenne()*NX;
+  t= mersenne()*NT, x=mersenne()*NX;
 
   //We break a link to create a fermion correlator.
   //The point the original link points to is the
   //starting point of the correlator
-  int dir = diraclink[t][x];
+  dir = diraclink[t][x];
   
-  double p = 2;    //There is always a factor 0.5 for each link
+  p = 2;    //There is always a factor 0.5 for each link
   if( dir == TUP ) p *= exp(-mu);
   if( dir == TDN ) p *= exp(mu);
   
   if(field[t][x] == 0 && mersenne() < p ){
-    int t0 = tdir(t, dir), x0 = xdir(x, dir);
-    int done = 0;
+    t0 = tdir(t, dir), x0 = xdir(x, dir);
     diraclink[t][x] = 10;
+  } else{
+    return 1;
+  }
     
-    for(int i=0;;i++) {
-      //Also calculate the propagator between the two defects
-      //This is the fermion propagator
-      //propagator[ (t-t0+NT)%NT ]+=find_sign(t0,x0,t,x);
+  for(int i=0;;i++) {
+    //Also calculate the propagator between the two defects
+    //This is the fermion propagator
+    //propagator[ (t-t0+NT)%NT ]+=find_sign(t0,x0,t,x);
 
-      //Pick a random direction to create a link
-      int dir = mersenne()*NDIRS;
+    //Pick a random direction to create a link
+    int dir = mersenne()*NDIRS;
 
-      double p=0.5;
-      if( dir == TUP ) p *= exp(mu);
-      if( dir == TDN ) p *= exp(-mu);
+    double p=0.5;
+    if( dir == TUP ) p *= exp(mu);
+    if( dir == TDN ) p *= exp(-mu);
 
-      // Check if the worm closes
-      int t2 = tdir(t, dir), x2 = xdir(x, dir);
-      if( t2 == t0 && x2 == x0 ) {
-        if( mersenne() < p ){
-          diraclink[t][x] = dir;
-          break;
-        }
-      } else {
-        
-        // Branch between adding/removing a link and propagating the worm
-        if(mersenne()<0.5){
-        
-         // If the middle site is empty, we can point a link to it
-         // There will then be a second link pointing at it, which we need
-         // to remove. That will become the head of the worm
-         if(field[t2][x2]==0) {
+    // Check if the worm closes
+    int t2 = tdir(t, dir), x2 = xdir(x, dir);
+    if( t2 == t0 && x2 == x0 ) {
+      if( mersenne() < p ){
+        diraclink[t][x] = dir;
+        break;
+      }
+    } else {
+      
+      // Branch between adding/removing a link and propagating the worm
+      if(mersenne()<0.5){
+      
+        if(field[t2][x2]==0) {
+          // If the middle site is empty, we can point a link to it
+          // There will then be a second link pointing at it, which we need
+          // to remove. That will become the head of the worm
           int removeddir;
           int t3,x3;
           for( int dir2 = 0; dir2<NDIRS; dir2++ ) {
@@ -375,8 +432,8 @@ int update_dirac_background(){
               removeddir = diraclink[t3][x3];
               break;
             }
-          }
-
+         }
+ 
           //Calculate the propability and flip the link
           p*=2;
           if( removeddir == TUP ) p *= exp(-mu);
@@ -387,19 +444,22 @@ int update_dirac_background(){
             diraclink[t3][x3] = 10;
             t=t3; x=x3;
           }
-         }
+        }
 
-        } else {
+      } else {
     
-          // Check if we can add or remove link at the site
-          // This is the only place in the worm where dimers
-          // are actually updated
-          if( field[t2][x2] == 0 ){
-            add_link_at( t2, x2 );
-          } else {
-            remove_link_at( t2, x2 ); 
-          }
-       }
+        // Check if we can add or remove link at the site
+        // This is the only place in the worm where dimers
+        // are actually updated
+        //if( field[t2][x2] == 0 ){
+        //  add_link_at( t2, x2 );
+        //} else {
+        //  remove_link_at( t2, x2 ); 
+        //}
+
+        // Create a monomer here
+        dirac_worm_add_monomer( &t, &x, dir );
+
       }
     }
   }
@@ -410,19 +470,56 @@ int update_dirac_background(){
 
 
 
+/* Updates for the monomer configuration */
+int move_monomer_in_worldline(int monomer, int *ts0, int *xs0, int dir);
+
+int update_monomers(){
+  int changes=0;
+
+  /* Attempt to create or destroy each monomer */
+  //for( int s=0; s<VOLUME; s++ ){
+  //  changes += update_monomer( );
+  //}
+
+  /* Try to move random monomers */
+  int n_monomer_moves = NX;
+  for(int i=0;i<n_monomer_moves;i++) {
+    int t = mersenne()*NT, x = mersenne()*NX;
+    int dir = mersenne()*NDIRS;
+    int t2 = tdir(t, dir), x2 = xdir(x, dir);
+    if( field[t][x] == MONOMER ){
+      if ( field[t2][x2] == 0 ){
+        //changes += move_monomer_in_worldline(MONOMER, &t, &x, dir);
+      } else if( field[t2][x2] >= LINK_TUP ){
+        int dir2 = field[t2][x2] - LINK_TUP;
+        int t3 = tdir(t2, dir2), x3 = xdir(x2, dir2);
+        //field[t3][x3] = MONOMER;
+        //field[t][x] = LINK_TUP + dir;
+        //field[t2][x2] = LINK_TUP + opp_dir(dir);
+        //
+        //changes += 1;
+      }
+    }
+  }
+
+  return changes;
+}
+
 /* A full update function. A single worm update followed by a number of random
-   link updates */
+   link and monomer updates */
 int update()
 {
   int changes=0;
 
-  update_dirac_background();
+  changes += update_dirac_background();
 
-  int n_update = NX*NT;
-  for(int i=0;i<n_update;i++) {
-    update_link();
-    update_monomer();
-  }
+  /* Update links and monomers */
+  //for( int s=0; s<VOLUME; s++ ){
+  //  changes += update_link_at( s );
+  //}
+
+  //changes += update_monomers();
+
   return changes;
 }
 
@@ -528,18 +625,6 @@ int sign_with_monomers(int t0, int x0, int t1, int x1){
 }
 
 
-/* Find a link pointing at a given site */
-int find_link_pointing_at( int t, int x ){
-  int t2,x2, dir;
-  for( dir = 0; dir<NDIRS; dir++ ) {
-    t2 = tdir(t, dir), x2 = xdir(x, dir);
-    if( diraclink[t2][x2] == opp_dir(dir) ){
-      //Found a site pointing to t,2
-      break;
-    }
-  }
-  return dir;
-}
 
 
 /* A worm for measuring the susceptibility in a wordline background
@@ -554,7 +639,7 @@ int find_link_pointing_at( int t, int x ){
  *   Hitting the source and moving it to close the worm
  *   Closing by hitting the defect
  */
-int move_source_monomer(int *ts0, int *xs0, int dir){
+int move_monomer_in_worldline(int monomer, int *ts0, int *xs0, int dir){
 
   int t = *ts0, x = *xs0;
   int t2 = tdir(t, dir), x2 = xdir(x, dir);
@@ -562,8 +647,8 @@ int move_source_monomer(int *ts0, int *xs0, int dir){
   int ts,xs;  //the location of the other end of the worm (source)
   
   // Check correct use
-  if( field[t][x] != SOURCE_MONOMER ){
-    errormessage("Starting point of move_source_monomer is not a source monomer\n");
+  if( field[t][x] != monomer ){
+    errormessage("Starting point of move_monomer_in_worldline is not a source monomer\n");
   }
   
   // This algorithm is only used when the neighbouring site
@@ -595,7 +680,7 @@ int move_source_monomer(int *ts0, int *xs0, int dir){
     if( mersenne() < p ){
       // Remove the source monomer at the original point and move it to point 3
       field[t][x] = 0;
-      field[t3][x3] = SOURCE_MONOMER;
+      field[t3][x3] = monomer;
 
       // This also means cutting the Worldline link at the site
       diraclink[t4][x4] = 10;
@@ -656,7 +741,7 @@ int move_source_monomer(int *ts0, int *xs0, int dir){
 
        // Move and close the worm
        if( mersenne() < p) {
-          field[t0][x0] = SOURCE_MONOMER;
+          field[t0][x0] = monomer;
           field[t2][x2] = 0;
           diraclink[t][x] = dir;
           diraclink[t0][x0] = NDIRS;
@@ -758,7 +843,7 @@ double measure_susceptibility_with_background( ){
          } else {
            // No link at found, run a worm that may move the
            // Source by two sites by updating the background field
-           move_source_monomer(&t2,&x2,dir);
+           move_monomer_in_worldline(SOURCE_MONOMER, &t2, &x2, dir);
          }
       }
     }
@@ -834,7 +919,7 @@ void get_double( char * name, double * dest ){
 
 void get_long( char * name, long * dest ){
   printf(" %s :", name);
-  if( scanf("%lf", dest) == 0 ){
+  if( scanf("%ld", dest) == 0 ){
     char message[60];
     sprintf(message, "Missing parameter %s\n", name);
     errormessage(message);
@@ -1000,7 +1085,7 @@ int main(int argc, char* argv[])
         printf("%d, %d measurements in %.3g seconds\n", i, n_average, 1e-6*measuretime);
         updatetime = 0; measuretime = 0;
 
-        printf("MONOMERS %g \n", (double)sum_monomers/n_average);
+        printf("MONOMERS %g \n", ((double)sum_monomers)/n_average);
         printf("LINKS %g \n", (double)sum_links/n_average);
         printf("CHARGE %g %g \n", (double)sum_charge/n_average, (double)sum_c2/n_average);
         printf("QCHI %g %g \n", (double)sum_q/n_average, (double)sum_q2/n_average);
