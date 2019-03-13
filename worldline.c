@@ -195,7 +195,7 @@ int update_monomers_at(int s, int dir)
     /* Remove monomers at t,x and t2, x2 */
     //Note the factor of 4 from the dirac operator,
     //each dirac link has 0.5
-    if( mersenne() < 1.0/(4*m*m) ) {
+    if( mersenne() < 1.0/(4.0*m*m) ) {
       monomers_off(t,x,dir);
       /* Replace with 2 opposing arrows */
       diraclink[t][x] = dir;
@@ -205,14 +205,13 @@ int update_monomers_at(int s, int dir)
     }
   } else if( field[t][x] == 0 && field[t2][x2] == 0 ) {
     /* No monomers or links, add if possible */
-    int t2 = tdir(t,dir), x2 = xdir(x,dir);
     int dir2 = diraclink[t2][x2];
 
     if( dir == diraclink[t][x] && dir == opp_dir(dir2) ){
       //Two opposing arrows, easy to add
       //Note the factor of 4 from the dirac operator,
       //each dirac link has 0.5
-      if( mersenne() < 4*m*m ) {
+      if( mersenne() < 4.0*m*m ) {
         monomers_on(t,x,dir);
         diraclink[t][x] = NDIRS;
         diraclink[t2][x2] = NDIRS;
@@ -226,7 +225,7 @@ int update_monomers_at(int s, int dir)
 
 int update_monomer()
 {
-  return update_monomers_at( (int) (mersenne()*VOLUME), (int) (mersenne()*NDIRS)  );
+  return update_monomers_at( (int) (mersenne()*VOLUME), (int) (mersenne()*ND)  );
 }
 
 
@@ -403,18 +402,18 @@ int update_dirac_background(){
     // leaving an empty site. This is both the start and the
     // end point of the worm. Mass monomers allow local correlators.
     
-    if( mersenne() < 0.5){
-      // Attempt only half the time to match the closing move
-      int empty_sites = VOLUME-n_monomers-2*n_links;
-      p = 1/m;
-      if( mersenne() < p ){
-        field[t][x] = 0;
-        diraclink[t][x] = 10;
-        n_monomers -= 1;
-        t0 = t; x0 = x;
-        started = 1;
-      }
-    }
+    //if( mersenne() < 0.5){
+    //  // Attempt only half the time to match the closing move
+    //  int empty_sites = VOLUME-n_monomers-2*n_links;
+    //  p = 1/m;
+    //  if( mersenne() < p ){
+    //    field[t][x] = 0;
+    //    diraclink[t][x] = 10;
+    //    n_monomers -= 1;
+    //    t0 = t; x0 = x;
+    //    started = 1;
+    //  }
+    //}
   } 
   
   if( started == 0 ){
@@ -434,16 +433,16 @@ int update_dirac_background(){
     if( mersenne() < 0.5){
       // At large masses this happens too often.
       // Attempt only half the time. 
-      if( t0 == t &&  x0 == x ){
-        int empty_sites = VOLUME-n_monomers-2*n_links;
-        p = m;
-        if( mersenne() < p ){
-          field[t][x] = MONOMER;
-          diraclink[t][x] = NDIRS;
-          n_monomers += 1;
-          break;
-        }
-      }
+      //if( t0 == t &&  x0 == x ){
+      //  int empty_sites = VOLUME-n_monomers-2*n_links;
+      //  p = m;
+      //  if( mersenne() < p ){
+      //    field[t][x] = MONOMER;
+      //    diraclink[t][x] = NDIRS;
+      //    n_monomers += 1;
+      //    break;
+      //  }
+      //}
     }
 
     // Pick a direction to propagate the worm
@@ -521,7 +520,7 @@ int update_dirac_background(){
         //printf(" (%d,%d) (%d,%d)\n", t, x, t0, x0);
 
         int dir = mersenne()*NDIRS;
-        dirac_worm_add_monomer( &t, &x, dir );
+        //dirac_worm_add_monomer( &t, &x, dir );
 
       }
     }
@@ -541,7 +540,8 @@ int update_dirac_background(){
 int update()
 {
   int changes=0;
-  update_monomer();
+  for( int s=0; s<NX; s++ )
+    update_monomer();
 
   changes += update_dirac_background();
 
