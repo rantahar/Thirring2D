@@ -533,17 +533,10 @@ int update_dirac_background(){
 int update()
 {
   int changes=0;
-  for( int s=0; s<NX; s++ ){
-    if( mersenne() < 0.5){
       changes += update_monomer();
-    } else {
       changes += update_link();
-    }
-  }
 
   /* Update links and monomers */
-  for( int s=0; s<NX; s++ )
-
   changes += update_dirac_background();
 
   return changes;
