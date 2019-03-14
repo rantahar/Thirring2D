@@ -1113,7 +1113,7 @@ int main(int argc, char* argv[])
           printf("SUSCEPTIBILITY %g \n", (double)sum_susc_wb/n_average);
         printf("SIGN %g\n", (double)sum_sign/n_average);
         for(int s=0; s<MAX_SECTOR; s++){
-          //printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
+          printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
           sectors[s] = 0;
         }
 
