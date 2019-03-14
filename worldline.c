@@ -136,41 +136,45 @@ static inline int is_legal(int t, int x, int nu){
 
 
 /* Try to add or remove a link at a given site */
-int update_link_at(int s)
+int update_link_at(int s, int dir2)
 {
   int success = 0;
   int t = s%NT, x = s/NT;
 
   if( field[t][x] >= LINK_TUP ) {
     int dir = field[t][x] - LINK_TUP;
-    int t2 = tdir(t,dir), x2 = xdir(x,dir);
-    /* Remove link at t,x */
-    //Note the factor of 4 from the dirac operator,
-    //each dirac link has 0.5
-    if( mersenne() < 1/(4*U) ) {
-      link_off(t,x,dir);
-      /* Replace with 2 opposing arrows */
-      diraclink[t][x] = dir;
-      diraclink[t2][x2] = opp_dir(dir);
-      n_links--;
-      success = 1;
+    if( dir == dir2 ){
+      int t2 = tdir(t,dir), x2 = xdir(x,dir);
+      /* Remove link at t,x */
+      //Note the factor of 4 from the dirac operator,
+      //each dirac link has 0.5
+      if( mersenne() < 1/(4*U) ) {
+        link_off(t,x,dir);
+        /* Replace with 2 opposing arrows */
+        diraclink[t][x] = dir;
+        diraclink[t2][x2] = opp_dir(dir);
+        n_links--;
+        success = 1;
+      }
     }
   } else if( field[t][x] == 0 ) {
     /* No link, add if possible */
     int dir = diraclink[t][x];
-    int t2 = tdir(t,dir), x2 = xdir(x,dir);
-    int nu = diraclink[t2][x2];
-
-    if( dir<NDIRS && dir == opp_dir(nu) ){
-      //Two opposing arrows, easy to add
-      //Note the factor of 4 from the dirac operator,
-      //each dirac link has 0.5
-      if( mersenne() < 4*U ) {
-        link_on(t,x,dir);
-        diraclink[t][x] = NDIRS;
-        diraclink[t2][x2] = NDIRS;
-        n_links++;
-        success = 1;
+    if( dir == dir2 ){
+      int t2 = tdir(t,dir), x2 = xdir(x,dir);
+      int nu = diraclink[t2][x2];
+      
+      if( dir<NDIRS && dir == opp_dir(nu) ){
+        //Two opposing arrows, easy to add
+        //Note the factor of 4 from the dirac operator,
+        //each dirac link has 0.5
+        if( mersenne() < 4*U ) {
+          link_on(t,x,dir);
+          diraclink[t][x] = NDIRS;
+          diraclink[t2][x2] = NDIRS;
+          n_links++;
+          success = 1;
+        }
       }
     }
   }
@@ -180,7 +184,7 @@ int update_link_at(int s)
 
 int update_link()
 {
-  return update_link_at( (int) (mersenne()*VOLUME) );
+  return update_link_at( (int) (mersenne()*VOLUME), (int) (mersenne()*ND) );
 }
 
 
@@ -189,34 +193,39 @@ int update_monomers_at(int s, int dir)
 {
   int success = 0;
   int t = s%NT, x = s/NT;
-  int t2 = tdir(t, dir), x2 = xdir(x, dir);
 
-  if( field[t][x] == MONOMER && field[t2][x2] == MONOMER ) {
-    /* Remove monomers at t,x and t2, x2 */
-    //Note the factor of 4 from the dirac operator,
-    //each dirac link has 0.5
-    if( mersenne() < 1.0/(4.0*m*m) ) {
-      monomers_off(t,x,dir);
-      /* Replace with 2 opposing arrows */
-      diraclink[t][x] = dir;
-      diraclink[t2][x2] = opp_dir(dir);
-      n_monomers-=2;
-      success = 1;
-    }
-  } else if( field[t][x] == 0 && field[t2][x2] == 0 ) {
-    /* No monomers or links, add if possible */
-    int dir2 = diraclink[t2][x2];
-
-    if( dir == diraclink[t][x] && dir == opp_dir(dir2) ){
-      //Two opposing arrows, easy to add
+  if( field[t][x] == MONOMER ) {
+    int t2 = tdir(t,dir), x2 = xdir(x,dir);
+    if( field[t2][x2] == MONOMER ){
+      /* Remove link at t,x */
       //Note the factor of 4 from the dirac operator,
       //each dirac link has 0.5
-      if( mersenne() < 4.0*m*m ) {
-        monomers_on(t,x,dir);
-        diraclink[t][x] = NDIRS;
-        diraclink[t2][x2] = NDIRS;
-        n_monomers+=2;
+      if( mersenne() < 1/(4*m*m) ) {
+        monomers_off(t,x,dir);
+        /* Replace with 2 opposing arrows */
+        diraclink[t][x] = dir;
+        diraclink[t2][x2] = opp_dir(dir);
+        n_monomers-=2;
         success = 1;
+      }
+    }
+  } else if( field[t][x] == 0 ) {
+    /* No link, add if possible */
+    if( dir == diraclink[t][x] ){
+      int t2 = tdir(t,dir), x2 = xdir(x,dir);
+      int nu = diraclink[t2][x2];
+      
+      if( dir<NDIRS && dir == opp_dir(nu) ){
+        //Two opposing arrows, easy to add
+        //Note the factor of 4 from the dirac operator,
+        //each dirac link has 0.5
+        if( mersenne() < (4*m*m) ) {
+          monomers_on(t,x,dir);
+          diraclink[t][x] = NDIRS;
+          diraclink[t2][x2] = NDIRS;
+          n_monomers+=2;
+          success = 1;
+        }
       }
     }
   }
@@ -509,11 +518,11 @@ int update_dirac_background(){
         // This is the only place in the worm where dimers
         // are updated
 
-        if( field[t2][x2] == 0 ){
-          add_link_at( t2, x2 );
-        } else {
-          remove_link_at( t2, x2 ); 
-        }
+        //if( field[t2][x2] == 0 ){
+        //  add_link_at( t2, x2 );
+        //} else {
+        //  remove_link_at( t2, x2 ); 
+        //}
 
       } else {
         // Add or remove a monomer
@@ -540,15 +549,18 @@ int update_dirac_background(){
 int update()
 {
   int changes=0;
-  for( int s=0; s<NX; s++ )
-    update_monomer();
-
-  changes += update_dirac_background();
+  for( int s=0; s<NX; s++ ){
+    if( mersenne() < 0.5){
+      changes += update_monomer();
+    } else {
+      changes += update_link();
+    }
+  }
 
   /* Update links and monomers */
-  //for( int s=0; s<VOLUME; s++ ){
-  //  changes += update_link_at( s );
-  //}
+  for( int s=0; s<NX; s++ )
+
+  changes += update_dirac_background();
 
   return changes;
 }
