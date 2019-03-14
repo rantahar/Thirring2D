@@ -337,15 +337,15 @@ int find_link_pointing_at( int t, int x ){
 
 
 // A step in the worm update that updates monomers
-void dirac_worm_add_monomer( int *t, int *x, int dir ){
-  int t2, x2;
+void dirac_worm_add_monomer( int *t, int *x ){
+  int t2, x2, dir;
   double p;
+  dir = mersenne()*NDIRS;
   t2 = tdir(*t, dir), x2 = xdir(*x, dir);
   
   if( field[t2][x2] == 0 ){
     int removeddir = diraclink[t2][x2];
     if( removeddir == opp_dir(dir) ){
-      //printf(" removing (%d,%d,%d)\n", t2, x2, removeddir);
       p = 2.0*m;
       if( removeddir == TUP ) p *= exp(-mu);
       if( removeddir == TDN ) p *= exp(mu);
@@ -385,7 +385,7 @@ int update_dirac_background(){
     //We break a link to create a fermion correlator.
     //The point the original link points to is the
     //starting point of the correlator
-    
+
     dir = diraclink[t][x];
     p = 2;    //There is always a factor 0.5 for each link
     if( dir == TUP ) p *= exp(-mu);
@@ -394,20 +394,23 @@ int update_dirac_background(){
       t0 = tdir(t, dir), x0 = xdir(x, dir);
       diraclink[t][x] = 10;
       started = 1;
-    } 
+    }
   } else if( field[t][x] == MONOMER ){
     // Selected a mass monomer. We just remove the monomer,
     // leaving an empty site. This is both the start and the
     // end point of the worm. Mass monomers allow local correlators.
-    
-    //p = 1/m;
-    //if( mersenne() < p ){
-    //  field[t][x] = 0;
-    //  diraclink[t][x] = 10;
-    //  n_monomers -= 1;
-    //  t0 = t; x0 = x;
-    //  started = 1;
-    //}
+    // The step with propability 0.5 corrects for the propability 
+    // to try the reverse update
+    if( mersenne() < 0.5 ){
+      p = 1/m;
+      if( mersenne() < p ){
+        field[t][x] = 0;
+        diraclink[t][x] = 10;
+        n_monomers -= 1;
+        t0 = t; x0 = x;
+        started = 1;
+      }
+    }
   }
   
   if( started == 0 ){
@@ -419,29 +422,36 @@ int update_dirac_background(){
     //This is the fermion propagator
 
     // First choose between adding propagating worm by
-    // 1. Adding a link
+    // 1. Adding a Dirac link
     // 2. Adding/Removing a link
     // 3. Adding/Removing a monomer
 
     int choice = 3*mersenne();
     if( choice == 0 ){
 
-      // Check if the start and end points overlap. This can
-      // happen with mass monomers. If they do, try to close
-      // the worm by adding a monomer.
-      //if( t0 == t &&  x0 == x ){
-      //  p = m;
-      //  if( mersenne() < p ){
-      //    field[t][x] = MONOMER;
-      //    diraclink[t][x] = NDIRS;
-      //    n_monomers += 1;
-      //    break;
-      //  }
-      //}
-
-      // Add or remove a monomer
-      dir = mersenne()*NDIRS;
-      dirac_worm_add_monomer( &t, &x, dir );
+      // Choose ending the worm or adding/removing monomers. The 0.5
+      // propability here is corrected in the start worm update.
+      if( mersenne() < 0.5 ){
+        // Check if the start and end points overlap. This can
+        // happen with mass monomers. If they do, try to close
+        // the worm by adding a monomer.
+        if( t0 == t &&  x0 == x ){
+          // Match the other worm ending update, which picks a
+          // random direction, propability 1/NDIRS
+          if( mersenne() < 1.0/(NDIRS) ){
+            p = m;
+            if( mersenne() < p ){
+              field[t][x] = MONOMER;
+              diraclink[t][x] = NDIRS;
+              n_monomers += 1;
+              break;
+            }
+          }
+        }
+      } else {
+        // Add or remove a monomer
+        dirac_worm_add_monomer( &t, &x );
+      }
 
     } 
     if( choice == 1 ){
