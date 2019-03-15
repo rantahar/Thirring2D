@@ -507,7 +507,9 @@ int update_dirac_background(){
           }
  
           //Calculate the propability and flip the link
-          p*=2;
+          p=1;
+          if( dir == TUP ) p *= exp(mu);
+          if( dir == TDN ) p *= exp(-mu);
           if( removeddir == TUP ) p *= exp(-mu);
           if( removeddir == TDN ) p *= exp(mu);
           if( mersenne() < p ){
@@ -533,8 +535,8 @@ int update_dirac_background(){
 int update()
 {
   int changes=0;
-      changes += update_monomer();
-      changes += update_link();
+  changes += update_monomer();
+  changes += update_link();
 
   /* Update links and monomers */
   changes += update_dirac_background();
@@ -731,6 +733,7 @@ int move_monomer_in_worldline(int monomer, int *ts0, int *xs0, int dir){
   }
   
   for(;done==0;){
+    
       // Now keep updating the worm until it closes
       int dir = mersenne()*NDIRS;
       t2 = tdir(t, dir), x2 = xdir(x, dir);
@@ -1069,6 +1072,7 @@ int main(int argc, char* argv[])
 
     /* Update */
     update();
+    print_config();
 
     if((i%n_measure)==0){
 
@@ -1116,6 +1120,8 @@ int main(int argc, char* argv[])
           printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
           sectors[s] = 0;
         }
+
+        fflush(stdout);
 
         sum_monomers = 0; sum_links = 0; sum_charge = 0;
         sum_c2 = 0; sum_q = 0; sum_q2 = 0; sum_susc = 0;
