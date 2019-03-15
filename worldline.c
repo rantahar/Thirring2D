@@ -20,7 +20,8 @@ double mu;
 
 /* LLR parameters */
 int llr_target;
-double llr_gaussian_weight = 5;
+int llr_wall = 1; // Allow only sectors llr_target and llr_target+1
+double llr_gaussian_weight = 5; // Used in thermalisation even with wall
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -378,6 +379,38 @@ void dirac_worm_add_monomer( int *t, int *x ){
 
 // In LLR, modify the acceptance rate based on the
 // number of negative loops
+double llr_a = 0;
+void LLR_update( double deltaS ){
+  static int iter = 1;
+  double alpha = 2;
+  
+  llr_a += alpha*deltaS/iter;
+  iter ++;
+}
+
+double LLR_weight( sector ){
+  double distance, logweight, weight;
+  if( llr_wall ){
+
+    if ( sector == llr_target ){
+      return 1;
+    } else if(sector == llr_target + 1){
+      return exp(llr_a);
+    } else {
+      return 0;
+    }
+
+  } else {
+
+    logweight = -distance*distance*llr_gaussian_weight;
+    if( sector > llr_target ){
+      logweight += llr_a;
+    }
+    weight = exp(logweight);
+    return weight;
+  }
+}
+
 int worm_close_accept(){
   int accept = 1;
 #ifdef LLR
@@ -385,10 +418,7 @@ int worm_close_accept(){
   int sector;
   double current_distance, previous_distance, weight;
   sector = count_negative_loops();
-  current_distance = sector - llr_target;
-  previous_distance = previous_sector - llr_target;
-  weight = (current_distance*current_distance - previous_distance*previous_distance);
-  weight = exp(-weight*llr_gaussian_weight);
+  weight = LLR_weight(sector)/LLR_weight(previous_sector);
   if( mersenne() < weight ){
     accept = 1;
     previous_sector = sector;
@@ -1110,8 +1140,10 @@ int main(int argc, char* argv[])
 #ifdef LLR
   {
     double weight_parameter = llr_gaussian_weight;
+    int wall_parameter = llr_wall;
     int sector=0;
     llr_gaussian_weight = 5;
+    llr_wall = 0;
     for (i=1;; i++) {
       // In LLR, wait for the target sector to be reached before
       // starting measurement runs
@@ -1128,6 +1160,7 @@ int main(int argc, char* argv[])
       }
     }
     llr_gaussian_weight = weight_parameter;
+    llr_wall = wall_parameter;
     printf( "Reached LLR target sector in %d thermalisation updates\n", i );
   }
 #endif
@@ -1179,13 +1212,17 @@ int main(int argc, char* argv[])
         if( m == 0 )
           printf("SUSCEPTIBILITY %g \n", (double)sum_susc_wb/n_average);
         printf("SIGN %g\n", (double)sum_sign/n_average);
-        for(int s=0; s<MAX_SECTOR; s++){
+        for(int s=0; s<MAX_SECTOR; s++)
           printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
-          sectors[s] = 0;
-        }
+
+        double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/n_average;
+        LLR_update( llr_dS );
+        printf("LLR dS = %g, a_%d = %g, exp(a) = %g\n", llr_dS, llr_target, llr_a, exp(llr_a));
 
         fflush(stdout);
 
+        for(int s=0; s<MAX_SECTOR; s++)
+          sectors[s] = 0;
         sum_monomers = 0; sum_links = 0; sum_charge = 0;
         sum_c2 = 0; sum_q = 0; sum_q2 = 0; sum_susc = 0;
         sum_susc_wb = 0; sum_sign = 0;
