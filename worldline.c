@@ -18,8 +18,8 @@ double m;
 double U;
 double mu;
 
-int llr_target = 5;
-double llr_gaussian_weight = 2;
+int llr_target;
+double llr_gaussian_weight = 5;
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -1008,8 +1008,10 @@ int main(int argc, char* argv[])
 
   get_long("Random seed", &seed);
 
-  get_int("maximum size of fluctuation matrix", &max_changes);
-  
+#ifdef LLR
+  get_int("Target LLR sector", &llr_target);
+#endif
+
   /* "Warm up" the rng generator */
   seed_mersenne( seed );
   for (i=0; i<543210; i++) mersenne();
