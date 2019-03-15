@@ -23,7 +23,7 @@ int llr_target;
 int llr_wall = 1;       // Allow only sectors llr_target and llr_target+1
 double llr_gaussian_weight = 5; // Used in thermalisation even with wall
 double llr_a = 0;       // The measurable a in the llr method
-double llr_alpha = 10;  // step size
+double llr_alpha = 1;   // step size
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -1211,8 +1211,8 @@ int main(int argc, char* argv[])
         if( m == 0 )
           printf("SUSCEPTIBILITY %g \n", (double)sum_susc_wb/n_average);
         printf("SIGN %g\n", (double)sum_sign/n_average);
-        for(int s=0; s<MAX_SECTOR; s++)
-          printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
+        //for(int s=0; s<MAX_SECTOR; s++)
+        //  printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
 
         double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/n_average;
         LLR_update( llr_dS );
