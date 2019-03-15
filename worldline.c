@@ -956,7 +956,6 @@ int count_negative_loops(){
 }
 
 
-
 /* Ask for parameter */
 void get_int( char * name, int * dest ){
   printf(" %s :", name);
@@ -1075,8 +1074,7 @@ int main(int argc, char* argv[])
   /* fill monomers and links */
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
     field[t][x] = 0;
-    diraclink[t][x] = XUP + 2*(x%2) ;
-
+    diraclink[t][x] = TUP;
   }
 
   int ** field_copy = malloc( NT*sizeof(int *) );
@@ -1111,18 +1109,16 @@ int main(int argc, char* argv[])
 #ifdef LLR
   {
     double weight_parameter = llr_gaussian_weight;
-    int sector;
+    int sector=0;
+    llr_gaussian_weight = 5;
     for (i=1;; i++) {
       // In LLR, wait for the target sector to be reached before
       // starting measurement runs
-      llr_gaussian_weight = 100;
   
       update();
   
       sector = count_negative_loops();
       if( sector == llr_target ) {
-        llr_gaussian_weight = weight_parameter;
-        printf( "Reached LLR target sector in %d thermalisation updates\n", i );
         break;
       }
       if( i== n_loops ){
@@ -1130,6 +1126,8 @@ int main(int argc, char* argv[])
         exit(1);
       }
     }
+    llr_gaussian_weight = weight_parameter;
+    printf( "Reached LLR target sector in %d thermalisation updates\n", i );
   }
 #endif
 
