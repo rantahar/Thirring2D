@@ -18,6 +18,7 @@ double m;
 double U;
 double mu;
 
+/* LLR parameters */
 int llr_target;
 double llr_gaussian_weight = 5;
 
