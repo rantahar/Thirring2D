@@ -18,6 +18,9 @@ double m;
 double U;
 double mu;
 
+int llr_target = 5;
+double llr_gaussian_weight = 2;
+
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
  */
@@ -372,6 +375,30 @@ void dirac_worm_add_monomer( int *t, int *x ){
 }
 
 
+// In LLR, modify the acceptance rate based on the
+// number of negative loops
+int worm_close_accept(){
+  int accept = 1;
+#ifdef LLR
+  static int previous_sector = 0;
+  int sector;
+  double current_distance, previous_distance, weight;
+  sector = count_negative_loops();
+  current_distance = sector - llr_target;
+  previous_distance = previous_sector - llr_target;
+  weight = (current_distance*current_distance - previous_distance*previous_distance);
+  weight = exp(-weight*llr_gaussian_weight);
+  if( mersenne() < weight ){
+    accept = 1;
+    previous_sector = sector;
+  } else {
+    accept = 0;
+  }
+#endif
+  return accept;
+}
+
+
 //Update the Dirac background using a worm update
 int update_dirac_background(){
   int t0, x0, t, x, dir;
@@ -444,7 +471,13 @@ int update_dirac_background(){
               field[t][x] = MONOMER;
               diraclink[t][x] = NDIRS;
               n_monomers += 1;
-              break;
+              if( worm_close_accept() ){
+                break;
+              } else {
+                field[t][x] = 0;
+                diraclink[t][x] = 10;
+                n_monomers -= 1;
+              }
             }
           }
         }
@@ -485,7 +518,11 @@ int update_dirac_background(){
         if( dir == TDN ) p *= exp(-mu);
         if( mersenne() < p ){
           diraclink[t][x] = dir;
-          break;
+          if( worm_close_accept() ){
+            break;
+          } else {
+            diraclink[t][x] = 10;
+          }
         }
   
       } else {
@@ -1068,11 +1105,31 @@ int main(int argc, char* argv[])
   struct timeval start, end;
   double updatetime=0, measuretime = 0;
   gettimeofday(&start,NULL);
+
+#ifdef LLR
+  {
+    double weight_parameter = llr_gaussian_weight;
+    int sector;
+    for (i=1; i<n_loops+1; i++) {
+      // In LLR, wait for the target sector to be reached before
+      // starting measurement runs
+      llr_gaussian_weight = 10;
+  
+      update();
+  
+      sector = count_negative_loops();
+      if( sector == llr_target ) {
+        llr_gaussian_weight = weight_parameter;
+        break;
+      }
+    }
+  }
+#endif
+
   for (i=1; i<n_loops+1; i++) {
 
     /* Update */
     update();
-    print_config();
 
     if((i%n_measure)==0){
 
