@@ -1110,17 +1110,22 @@ int main(int argc, char* argv[])
   {
     double weight_parameter = llr_gaussian_weight;
     int sector;
-    for (i=1; i<n_loops+1; i++) {
+    for (i=1;; i++) {
       // In LLR, wait for the target sector to be reached before
       // starting measurement runs
-      llr_gaussian_weight = 10;
+      llr_gaussian_weight = 100;
   
       update();
   
       sector = count_negative_loops();
       if( sector == llr_target ) {
         llr_gaussian_weight = weight_parameter;
+        printf( "Reached LLR target sector in %d thermalisation updates\n", i );
         break;
+      }
+      if( i== n_loops ){
+        printf( "Did not reach LLR target sector in %d updates\n", n_loops );
+        exit(1);
       }
     }
   }
