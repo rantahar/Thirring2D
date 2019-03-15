@@ -20,8 +20,10 @@ double mu;
 
 /* LLR parameters */
 int llr_target;
-int llr_wall = 1; // Allow only sectors llr_target and llr_target+1
+int llr_wall = 1;       // Allow only sectors llr_target and llr_target+1
 double llr_gaussian_weight = 5; // Used in thermalisation even with wall
+double llr_a = 0;       // The measurable a in the llr method
+double llr_alpha = 10;  // step size
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -379,12 +381,9 @@ void dirac_worm_add_monomer( int *t, int *x ){
 
 // In LLR, modify the acceptance rate based on the
 // number of negative loops
-double llr_a = 0;
 void LLR_update( double deltaS ){
   static int iter = 1;
-  double alpha = 2;
-  
-  llr_a += alpha*deltaS/iter;
+  llr_a += llr_alpha*deltaS/iter;
   iter ++;
 }
 
@@ -393,9 +392,9 @@ double LLR_weight( sector ){
   if( llr_wall ){
 
     if ( sector == llr_target ){
-      return 1;
+      return exp(-0.5*llr_a);
     } else if(sector == llr_target + 1){
-      return exp(llr_a);
+      return exp(0.5*llr_a);
     } else {
       return 0;
     }
