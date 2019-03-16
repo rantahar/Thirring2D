@@ -20,8 +20,9 @@ double mu;
 
 /* LLR parameters */
 int llr_target;
-int llr_wall = 1;       // Allow only sectors llr_target and llr_target+1
+int llr_wall = 0;       // Allow only sectors llr_target and llr_target+1
 double llr_gaussian_weight = 2; // Used in thermalisation even with wall
+double worm_gaussian_weight = 1; // Used in thermalisation even with wall
 double llr_a = 0;         // The measurable a in the llr method
 double llr_alpha = 2;     // step size
 
@@ -313,7 +314,7 @@ int linksign( int t, int x, int dir ){
 
 /* Calculate the sign of the propagator between the head and tail of a worm,
    the fermion propagator. Just follow the worm and count the signs. */
-int find_sign(int t0, int x0, int t, int x){
+int propagator_sign(int t0, int x0, int t, int x){
   int dir = diraclink[t0][x0];
   int sign = linksign(t0,x0,dir);
   int t1 = tdir(t0, dir), x1= xdir(x0, dir);
@@ -341,42 +342,6 @@ int find_link_pointing_at( int t, int x ){
   return dir;
 }
 
-
-
-// A step in the worm update that updates monomers
-void dirac_worm_add_monomer( int *t, int *x ){
-  int t2, x2, dir;
-  double p;
-  dir = mersenne()*NDIRS;
-  t2 = tdir(*t, dir), x2 = xdir(*x, dir);
-  
-  if( field[t2][x2] == 0 ){
-    int removeddir = diraclink[t2][x2];
-    if( removeddir == opp_dir(dir) ){
-      p = 2.0*m;
-      if( removeddir == TUP ) p *= exp(-mu);
-      if( removeddir == TDN ) p *= exp(mu);
-      if( mersenne() < p ){
-        field[*t][*x] = MONOMER;
-        diraclink[*t][*x] = NDIRS;
-        diraclink[t2][x2] = 10;
-        *t=t2; *x=x2;
-        n_monomers += 1;
-      }
-    }
-  } else if( field[t2][x2] == MONOMER ){
-    p = 0.5/m;
-    if( dir == TUP ) p *= exp(mu);
-    if( dir == TDN ) p *= exp(-mu);
-    if( mersenne() < p ){
-      field[t2][x2] = 0;
-      diraclink[*t][*x] = dir;
-      diraclink[t2][x2] = 10;
-      *t=t2; *x=x2;
-      n_monomers -= 1;
-    }
-  }
-}
 
 
 // In LLR, modify the acceptance rate based on the
@@ -415,17 +380,17 @@ double LLR_weight( sector ){
   }
 }
 
+int current_sector = 0;
 int worm_close_accept(){
   int accept = 1;
 #ifdef LLR
-  static int previous_sector = 0;
   int sector;
   double current_distance, previous_distance, weight;
   sector = count_negative_loops();
-  weight = LLR_weight(sector)/LLR_weight(previous_sector);
+  weight = LLR_weight(sector)/LLR_weight(current_sector);
   if( mersenne() < weight ){
     accept = 1;
-    previous_sector = sector;
+    current_sector = sector;
   } else {
     accept = 0;
   }
@@ -433,6 +398,62 @@ int worm_close_accept(){
   return accept;
 }
 
+double remove_link_weight(t, x){
+  double weight;
+  int dir = diraclink[t][x];
+  weight = 2;    //There is always a factor 0.5 for each link
+  if( dir == TUP ) weight *= exp(-mu);
+  if( dir == TDN ) weight *= exp(mu);
+
+#ifdef LLR
+#endif
+
+  return weight;
+}
+
+double add_link_weight(t, x, dir){
+  double weight;
+  weight = 0.5;    //There is always a factor 0.5 for each link
+  if( dir == TUP ) weight *= exp(mu);
+  if( dir == TDN ) weight *= exp(-mu);
+
+#ifdef LLR
+#endif
+
+ return weight;
+}
+
+
+// A step in the worm update that updates monomers
+void dirac_worm_add_monomer( int *t, int *x ){
+  int t2, x2, dir;
+  double p;
+  dir = mersenne()*NDIRS;
+  t2 = tdir(*t, dir), x2 = xdir(*x, dir);
+  
+  if( field[t2][x2] == 0 ){
+    int removeddir = diraclink[t2][x2];
+    if( removeddir == opp_dir(dir) ){
+      p = m*remove_link_weight(t2, x2);
+      if( mersenne() < p ){
+        field[*t][*x] = MONOMER;
+        diraclink[*t][*x] = NDIRS;
+        diraclink[t2][x2] = 10;
+        *t=t2; *x=x2;
+        n_monomers += 1;
+      }
+    }
+  } else if( field[t2][x2] == MONOMER ){
+    p = add_link_weight(t, x, dir) / m;
+    if( mersenne() < p ){
+      field[t2][x2] = 0;
+      diraclink[*t][*x] = dir;
+      diraclink[t2][x2] = 10;
+      *t=t2; *x=x2;
+      n_monomers -= 1;
+    }
+  }
+}
 
 //Update the Dirac background using a worm update
 int update_dirac_background(){
@@ -448,11 +469,10 @@ int update_dirac_background(){
     //The point the original link points to is the
     //starting point of the correlator
 
-    dir = diraclink[t][x];
-    p = 2;    //There is always a factor 0.5 for each link
-    if( dir == TUP ) p *= exp(-mu);
-    if( dir == TDN ) p *= exp(mu);
+    p = remove_link_weight(t,x);
+    
     if( mersenne() < p ){
+      dir = diraclink[t][x];
       t0 = tdir(t, dir), x0 = xdir(x, dir);
       diraclink[t][x] = 10;
       started = 1;
@@ -548,9 +568,7 @@ int update_dirac_background(){
       // This needs to have the same weight as opening the worm
       if( t2 == t0 && x2 == x0 ) {
         // The weight for adding the link
-        p=0.5;
-        if( dir == TUP ) p *= exp(mu);
-        if( dir == TDN ) p *= exp(-mu);
+        p = add_link_weight(t,x,dir);
         if( mersenne() < p ){
           diraclink[t][x] = dir;
           if( worm_close_accept() ){
@@ -579,11 +597,8 @@ int update_dirac_background(){
           }
  
           //Calculate the propability and flip the link
-          p=1;
-          if( dir == TUP ) p *= exp(mu);
-          if( dir == TDN ) p *= exp(-mu);
-          if( removeddir == TUP ) p *= exp(-mu);
-          if( removeddir == TDN ) p *= exp(mu);
+          p = add_link_weight(t,x,dir);
+          p *= remove_link_weight(t3,x3);
           if( mersenne() < p ){
             //flip the link
             diraclink[t][x] = dir;
@@ -1234,7 +1249,7 @@ int main(int argc, char* argv[])
     double weight_parameter = llr_gaussian_weight;
     int wall_parameter = llr_wall;
     int sector=0;
-    llr_gaussian_weight = 5;
+    llr_gaussian_weight = 3;
     llr_wall = 0;
     for (i=1;; i++) {
       // In LLR, wait for the target sector to be reached before
@@ -1277,6 +1292,7 @@ int main(int argc, char* argv[])
       if((i%llr_update_every*n_measure)==0){
         double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/(double)llr_update_every;
         LLR_update( llr_dS );
+        printf( "LLR update %d %d %f\n", sectors[llr_target],sectors[llr_target+1], llr_dS );
         sectors[llr_target] = 0;
         sectors[llr_target+1] = 0;
         sum_llr_a += llr_a;
