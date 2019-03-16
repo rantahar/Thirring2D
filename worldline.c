@@ -684,7 +684,7 @@ int update()
   int changes=0;
 
   /* local updates */
-  if( mersenne() < 0.9 ){
+  if( mersenne() < 0.8 ){
     do{
       changes += update_monomer();
       changes += update_link();
