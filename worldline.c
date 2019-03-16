@@ -383,18 +383,19 @@ void dirac_worm_add_monomer( int *t, int *x ){
 // number of negative loops
 void LLR_update( double deltaS ){
   static int iter = 1;
-  llr_a += llr_alpha*deltaS/iter;
+  llr_a -= llr_alpha*deltaS/iter;
   iter ++;
 }
 
+// Get the modified weight of a sector
 double LLR_weight( sector ){
   double distance, logweight, weight;
   if( llr_wall ){
 
     if ( sector == llr_target ){
-      return exp(-0.5*llr_a);
+      return exp(2*llr_a);
     } else if(sector == llr_target + 1){
-      return exp(0.5*llr_a);
+      return exp(-2*llr_a);
     } else {
       return 0;
     }
