@@ -21,9 +21,9 @@ double mu;
 /* LLR parameters */
 int llr_target;
 int llr_wall = 1;       // Allow only sectors llr_target and llr_target+1
-double llr_gaussian_weight = 5; // Used in thermalisation even with wall
-double llr_a = 0;       // The measurable a in the llr method
-double llr_alpha = 1;   // step size
+double llr_gaussian_weight = 2; // Used in thermalisation even with wall
+double llr_a = 0;         // The measurable a in the llr method
+double llr_alpha = 2;     // step size
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -402,9 +402,13 @@ double LLR_weight( sector ){
 
   } else {
 
+    distance = sector - llr_target-0.5;
     logweight = -distance*distance*llr_gaussian_weight;
-    if( sector > llr_target ){
-      logweight += llr_a;
+    if( distance < 0 ){
+      logweight += 2*llr_a;
+    } else {
+      logweight -= 2*llr_a;
+
     }
     weight = exp(logweight);
     return weight;
@@ -596,18 +600,101 @@ int update_dirac_background(){
 
 
 
+/* A local plaquette update for the worldline configuration */
+int plaquette_update(){
+  int x1, t1, x2, t2, x3, t3, x4, t4, dir1, dir2, changes=0;
+  // Pick a site
+  t1= mersenne()*NT, x1=mersenne()*NX;
 
+  if( field[t1][x1] == 0 ){
+    dir1 = diraclink[t1][x1];
+  
+    // Pick orthogonal direction
+    dir2 = (dir1+1)%ND;
+    if(mersenne()<0.5){
+      dir2 = opp_dir(dir2);
+    }
+
+    t2 = tdir(t1, dir1), x2 = xdir(x1, dir1);
+    t3 = tdir(t2, dir2), x3 = xdir(x2, dir2);
+    t4 = tdir(t1, dir2), x4 = xdir(x1, dir2);
+    
+    if(field[t4][x4] == MONOMER){
+      // A monomer and a corner get flipped
+      // >  v      v  o
+      // o  >  ->  >  >
+      if( diraclink[t2][x2] == dir2 ){
+        diraclink[t1][x1] = dir2;
+        field[t2][x2] = MONOMER;
+        diraclink[t2][x2] = NDIRS;
+        diraclink[t4][x4] = dir1;
+        field[t4][x4] = 0;
+        changes = 1;
+      }
+    } else {
+      if( diraclink[t3][x3] == opp_dir(dir1) ){
+        // Two links pointing to opposing directions are flipped
+        // >  <      >  v
+        // >  <  ->  ^  < 
+        diraclink[t1][x1] = dir2;
+        diraclink[t3][x3] = opp_dir(dir2);
+        changes = 1;
+      }
+    }
+  }
+  return changes;
+}
+
+/* Try to flip the direction of a loop */
+int flip_loop(){
+  int x0, t0, t, x, t2, x2, dir, nt=0, changes=0;
+  double weight;
+  // Pick a site
+  t0 = mersenne()*NT, x0 = mersenne()*NX;
+  if( field[t0][x0] == 0 ){
+    t = t0; x = x0;
+    do {
+      dir = diraclink[t][x];
+      nt += dir == TUP;
+      nt -= dir == TDN;
+      t = tdir(t, dir), x = xdir(x, dir);
+    } while( t0 != t || x0 != x );
+  
+    weight = exp(-nt*mu);
+    if( mersenne() < weight ){
+      t = t0; x = x0;
+      dir = diraclink[t][x];
+      do {
+        int dir2;
+        t = tdir(t, dir), x = xdir(x, dir);
+        dir2 = dir;
+        dir = diraclink[t][x];
+        diraclink[t][x] = opp_dir(dir2);
+      } while( t0 != t || x0 != x );
+      changes = 1;
+    }
+  }
+  return changes;
+}
 
 /* A full update function. A single worm update followed by a number of random
    link and monomer updates */
 int update()
 {
   int changes=0;
-  changes += update_monomer();
-  changes += update_link();
 
-  /* Update links and monomers */
-  changes += update_dirac_background();
+  /* local updates */
+  if( mersenne() < 0.9 ){
+    do{
+      changes += update_monomer();
+      changes += update_link();
+      changes += plaquette_update();
+      changes += flip_loop();
+    } while( worm_close_accept() == 0 );
+  } else {
+    /* Worm update */
+    changes += update_dirac_background();
+  }
 
   return changes;
 }
@@ -632,7 +719,7 @@ void print_config()
       if(field[t][x]==LINK_XUP) { empty = 0; printf(" --"); }
       if(field[t][x]==LINK_TDN) { empty = 0; printf(" | "); }
       if(field[t][x]==LINK_XDN) { empty = 0; printf("-- "); }
-      if(field[t][x]==SOURCE_MONOMER) { empty = 0; printf(" x "); }
+      if(field[t][x]==EMPTY) { empty = 0; printf("*"); }
       if(diraclink[t][x]==10) printf(" . ");
       if(diraclink[t][x]==TUP) printf(" ^ ");
       if(diraclink[t][x]==TDN) printf(" v ");
