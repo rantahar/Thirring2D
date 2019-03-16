@@ -1024,7 +1024,7 @@ int main(int argc, char* argv[])
   feenableexcept(FE_INVALID | FE_OVERFLOW);
   #endif 
 
-  int i,n_loops,n_measure,n_average;
+  int i,n_loops,n_measure,n_average,llr_update_every;
   long seed;
 
   /* Read in the input */
@@ -1040,6 +1040,7 @@ int main(int argc, char* argv[])
 
 #ifdef LLR
   get_int("Target LLR sector", &llr_target);
+  get_int("Updates / LLr update", &llr_update_every);
 #endif
 
   /* "Warm up" the rng generator */
@@ -1054,7 +1055,10 @@ int main(int argc, char* argv[])
   printf(" mu %f \n", mu);
   printf(" Size of fluctuation matrix %d\n", max_changes );
   printf(" Random seed %ld\n", seed );
-
+#ifdef LLR
+  printf(" LLR target %d\n", llr_target );
+  printf(" LLR updated every %ld updates\n", llr_update_every );
+#endif
   /* Allocate location and field arrays */
   field = malloc( NT*sizeof(int *) );
   diraclink = malloc( NT*sizeof(int *) );
@@ -1170,6 +1174,20 @@ int main(int argc, char* argv[])
     /* Update */
     update();
 
+    #ifdef LLR
+    {
+      int sector = count_negative_loops();
+      sectors[sector] += 1;
+      if((i%llr_update_every)==0){
+        double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/(double)llr_update_every;
+        LLR_update( llr_dS );
+        sectors[llr_target] = 0;
+        sectors[llr_target+1] = 0;
+        printf("LLR dS = %g, a_%d = %g, exp(a) = %g\n", llr_dS, llr_target, llr_a, exp(llr_a));
+      }
+    }
+    #endif
+
     if((i%n_measure)==0){
 
       /* Time and report */
@@ -1179,7 +1197,9 @@ int main(int argc, char* argv[])
       gettimeofday(&start,NULL);
 
       int sector = count_negative_loops();
+      #ifndef LLR
       sectors[sector] += 1;
+      #endif
       int sign = 1-(sector%2)*2;
       sum_sign += sign;
       //measure_propagator(); //This includes an invertion and therefore takes time
@@ -1212,19 +1232,16 @@ int main(int argc, char* argv[])
         if( m == 0 )
           printf("SUSCEPTIBILITY %g \n", (double)sum_susc_wb/n_average);
         printf("SIGN %g\n", (double)sum_sign/n_average);
-        #ifndef LLR
-        for(int s=0; s<MAX_SECTOR; s++)
-          printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
-        #endif
 
-        double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/n_average;
-        LLR_update( llr_dS );
-        printf("LLR dS = %g, a_%d = %g, exp(a) = %g\n", llr_dS, llr_target, llr_a, exp(llr_a));
+        #ifndef LLR
+        for(int s=0; s<MAX_SECTOR; s++){
+          printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
+          sectors[s] = 0;
+        }
+        #endif
 
         fflush(stdout);
 
-        for(int s=0; s<MAX_SECTOR; s++)
-          sectors[s] = 0;
         sum_monomers = 0; sum_links = 0; sum_charge = 0;
         sum_c2 = 0; sum_q = 0; sum_q2 = 0; sum_susc = 0;
         sum_susc_wb = 0; sum_sign = 0;
