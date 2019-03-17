@@ -20,7 +20,6 @@ double mu;
 
 /* LLR parameters */
 int llr_target;
-int llr_wall = 0;       // Allow only sectors llr_target and llr_target+1
 double llr_gaussian_weight = 2; // Used in thermalisation even with wall
 double worm_gaussian_weight = 1; // Used in thermalisation even with wall
 double llr_a = 0;         // The measurable a in the llr method
@@ -390,28 +389,15 @@ void LLR_update( double deltaS ){
 // Get the modified weight of a sector
 double LLR_weight( sector ){
   double distance, logweight, weight;
-  if( llr_wall ){
-
-    if ( sector == llr_target ){
-      return exp(2*llr_a);
-    } else if(sector == llr_target + 1){
-      return exp(-2*llr_a);
-    } else {
-      return 0;
-    }
-
+  distance = sector - llr_target-0.5;
+  logweight = -(distance*distance-0.25)*llr_gaussian_weight;
+  if( distance < 0 ){
+    logweight += 2*llr_a;
   } else {
-
-    distance = sector - llr_target-0.5;
-    logweight = -(distance*distance-0.25)*llr_gaussian_weight;
-    if( distance < 0 ){
-      logweight += 2*llr_a;
-    } else {
-      logweight -= 2*llr_a;
-    }
-    weight = exp(logweight);
-    return weight;
+    logweight -= 2*llr_a;
   }
+  weight = exp(logweight);
+  return weight;
 }
 
 int current_sector = 0;
@@ -1293,10 +1279,8 @@ int main(int argc, char* argv[])
 #ifdef LLR
   {
     double weight_parameter = llr_gaussian_weight;
-    int wall_parameter = llr_wall;
     int sector=0;
     llr_gaussian_weight = 3;
-    llr_wall = 0;
     for (i=1;; i++) {
       // In LLR, wait for the target sector to be reached before
       // starting measurement runs
@@ -1313,7 +1297,6 @@ int main(int argc, char* argv[])
       }
     }
     llr_gaussian_weight = weight_parameter;
-    llr_wall = wall_parameter;
     printf( "Reached LLR target sector in %d thermalisation updates\n", i );
   }
 #endif
