@@ -388,13 +388,18 @@ void LLR_update( double deltaS ){
 
 // Get the modified weight of a sector
 double LLR_weight( sector ){
-  double distance, logweight, weight;
+  double distance, logweight, weight, a;
+  #ifdef LLR_CLOSE
+  a = 2*llr_a;
+  #else
+  a = 4*llr_a;
+  #endif
   distance = sector - llr_target-0.5;
   logweight = -(distance*distance-0.25)*llr_gaussian_weight;
   if( distance < 0 ){
-    logweight += 2*llr_a;
+    logweight += a;
   } else {
-    logweight -= 2*llr_a;
+    logweight -= a;
   }
   weight = exp(logweight);
   return weight;
