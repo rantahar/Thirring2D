@@ -326,6 +326,41 @@ int propagator_sign(int t0, int x0, int t, int x){
   return( sign );
 }
 
+/* Figure out the sign of the current
+   configuration. In the most general
+   case we go over all fermion loops. */
+int count_negative_loops(){
+  int sector = 0;
+
+  // Mark the checked sites to avoid double counting
+  int checked[NT][NX];
+  for(int t=0; t<NT; t++) for(int x=0;x<NX;x++)
+    checked[t][x] = 0;
+
+  // Cycle trough all the sites and follow around each loop
+  for(int t=0; t<NT; t++) for(int x=0;x<NX;x++) if(field[t][x]==0) if(checked[t][x] == 0){
+    int dir, loop_sign = -1;
+    int t1 = t, x1 = x;
+    do {
+      dir = diraclink[t1][x1];
+      if( dir == NDIRS || dir == 10 ){
+        loop_sign = 1;
+        break;
+      }
+      loop_sign *= linksign(t1,x1,dir);
+      checked[t1][x1] = 1;
+      t1 = tdir(t1, dir), x1 = xdir(x1, dir);
+    } while( t1 != t || x1 != x );
+
+    if( loop_sign < 0 ){
+      sector += 1;
+    }
+
+  }
+  
+  return sector;
+}
+
 
 
 
@@ -383,7 +418,7 @@ double LLR_weight( sector ){
 int current_sector = 0;
 int worm_close_accept(){
   int accept = 1;
-#ifdef LLR
+#ifdef LLR_CLOSE
   int sector;
   double current_distance, previous_distance, weight;
   sector = count_negative_loops();
@@ -406,6 +441,20 @@ double remove_link_weight(t, x){
   if( dir == TDN ) weight *= exp(mu);
 
 #ifdef LLR
+  int tl = t, xl = x, sign = -1;
+  do {
+    dir = diraclink[tl][xl];
+    if( dir == NDIRS || dir == 10 ){
+      sign = 1;
+      break;
+    }
+    sign *= linksign(tl,xl,dir);
+    tl = tdir(tl, dir); xl = xdir(xl, dir);
+  } while( t != tl || x != xl );
+  if( sign == -1 ){
+    int current_sector = count_negative_loops();
+    weight *= LLR_weight(current_sector-1)/LLR_weight(current_sector);
+  }
 #endif
 
   return weight;
@@ -418,6 +467,25 @@ double add_link_weight(t, x, dir){
   if( dir == TDN ) weight *= exp(-mu);
 
 #ifdef LLR
+  int t0, x0, tl, xl, sign= -1;
+  t0 = tl = tdir(t, dir); x0 = xl = xdir(x, dir);
+  do {
+    dir = diraclink[tl][xl];
+    if( dir == NDIRS ){
+      sign = 1;
+      break;
+    }
+    sign *= linksign(tl,xl,dir);
+    tl = tdir(tl, dir); xl = xdir(xl, dir);
+    if( t0 == tl && x0 == xl ){
+      sign = 1;
+      break;
+    }
+  } while( t != tl || x != xl );
+  if( sign == -1 ){
+    int current_sector = count_negative_loops();
+    weight *= LLR_weight(current_sector+1)/LLR_weight(current_sector);
+  }
 #endif
 
  return weight;
@@ -444,7 +512,7 @@ void dirac_worm_add_monomer( int *t, int *x ){
       }
     }
   } else if( field[t2][x2] == MONOMER ){
-    p = add_link_weight(t, x, dir) / m;
+    p = add_link_weight(*t, *x, dir) / m;
     if( mersenne() < p ){
       field[t2][x2] = 0;
       diraclink[*t][*x] = dir;
@@ -699,7 +767,7 @@ int update()
   int changes=0;
 
   /* local updates */
-  if( mersenne() < 0.8 ){
+  if( mersenne() < 0.0 ){
     do{
       changes += update_monomer();
       changes += update_link();
@@ -1055,38 +1123,7 @@ double measure_susceptibility_with_background( ){
 
 
 
-/* Figure out the sign of the current
-   configuration. In the most general
-   case we go over all fermion loops. */
-int count_negative_loops(){
-  int sector = 0;
 
-  // Mark the checked sites to avoid double counting
-  int checked[NT][NX];
-  for(int t=0; t<NT; t++) for(int x=0;x<NX;x++)
-    checked[t][x] = 0;
-
-  // Cycle trough all the sites and follow around each loop
-  for(int t=0; t<NT; t++) for(int x=0;x<NX;x++) if(field[t][x]==0) if(checked[t][x] == 0){
-    int dir = diraclink[t][x];
-    int loop_sign = linksign(t,x,dir);
-    checked[t][x] = 1;
-    int t1 = tdir(t, dir), x1= xdir(x, dir);
-    while( t1 != t || x1 != x ){
-      dir = diraclink[t1][x1];
-      loop_sign *= linksign(t1,x1,dir);
-      checked[t1][x1] = 1;
-      t1 = tdir(t1, dir), x1 = xdir(x1, dir);
-    }
-
-    if( loop_sign > 0 ){
-      sector += 1;
-    }
-
-  }
-  
-  return sector;
-}
 
 
 /* Ask for parameter */
