@@ -10,6 +10,10 @@
 #define M_PI 3.14159265358979323846264338327 
 #endif
 
+#ifdef LLR
+#define LLR_WORM_CLOSE
+#endif
+
 /* Lattice size and dimensions */
 #define NT 4
 #define NX 4

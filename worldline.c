@@ -69,6 +69,24 @@ static inline int opp_dir(int dir){
   return ( dir + ND ) % NDIRS;
 }
 
+/* Make a copy of the fields */
+int old_field[NT][NX];
+int old_diraclink[NT][NX];
+void save_field(){
+  for( int x=0; x<NX; x++ ) for( int t=0; t<NT; t++ ){
+    old_field[t][x] = field[t][x];
+    old_diraclink[t][x] = diraclink[t][x];
+  }
+}
+
+/* Restore the saved field */
+void restore_field(){
+  for( int x=0; x<NX; x++ ) for( int t=0; t<NT; t++ ){
+    field[t][x] = old_field[t][x];
+    diraclink[t][x] = old_diraclink[t][x];
+  }
+}
+
 /* Turn a link on */
 static inline void link_on(int t, int x, int dir){
   int t2 = tdir(t, dir);
@@ -522,6 +540,11 @@ int update_dirac_background(){
   int t0, x0, t, x, dir;
   double p;
   int started = 0;
+#ifdef LLR_WORM_CLOSE
+  save_field();
+#elif LLR_WORM_STEP
+  update_accepted();
+#endif
 
   //Pick a site
   t= mersenne()*NT, x=mersenne()*NX;
@@ -589,13 +612,7 @@ int update_dirac_background(){
               diraclink[t][x] = NDIRS;
               n_monomers += 1;
               update_accepted();
-              if( worm_close_accept() ){
               break;
-              } else {
-                field[t][x] = 0;
-                diraclink[t][x] = 10;
-                n_monomers -= 1;
-              }
             }
           }
         }
@@ -635,11 +652,7 @@ int update_dirac_background(){
         if( mersenne() < p ){
           diraclink[t][x] = dir;
           update_accepted();
-          if( worm_close_accept() ){
           break;
-          } else {
-            diraclink[t][x] = 10;
-          }
         }
   
       } else {
@@ -674,6 +687,13 @@ int update_dirac_background(){
       }
     }
   }
+
+#ifdef LLR_WORM_CLOSE
+  if( ! worm_close_accept() ){
+    restore_field();
+    return 0;
+  }
+#endif
 
   return 1;
 }
@@ -765,12 +785,14 @@ int update()
 
   /* local updates */
   if( mersenne() < 0.0 ){
-    do{
+    save_field();
     changes += update_monomer();
     changes += update_link();
     changes += plaquette_update();
     changes += flip_loop();
-    } while( worm_close_accept() == 0 );
+    if( ! worm_close_accept() ){
+      restore_field();
+    }
   } else {
     /* Worm update */
     changes += update_dirac_background();
