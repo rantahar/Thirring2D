@@ -419,11 +419,11 @@ double LLR_weight( sector ){
   return weight;
 }
 
+/* Check wether to accept a configuration */
 int current_sector = 0;
 int llr_accepted=0;
 int llr_accept(){
   int accept = 1;
-#ifdef LLR
   int sector;
   double current_distance, previous_distance, weight;
   sector = count_negative_loops();
@@ -435,11 +435,10 @@ int llr_accept(){
   } else {
     accept = 0;
   }
-#endif
   return accept;
 }
 
-
+/* The propability of removing a link */
 double remove_link_weight(t, x){
   double weight;
   int dir = diraclink[t][x];
@@ -449,7 +448,7 @@ double remove_link_weight(t, x){
   return weight;
 }
 
-
+/* The propability of adding a link */
 double add_link_weight(t, x, dir){
   double weight;
   weight = 0.5;    //There is always a factor 0.5 for each link
