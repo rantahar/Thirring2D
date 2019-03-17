@@ -20,9 +20,9 @@ double mu;
 
 /* LLR parameters */
 int llr_target;
-double llr_gaussian_weight = 2; // Used in thermalisation even with wall
+double llr_gaussian_weight = 0.5; // Used in thermalisation even with wall
 double llr_a = 0;         // The measurable a in the llr method
-double llr_alpha = 2;     // step size
+double llr_alpha = 1;     // step size
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -388,17 +388,12 @@ void LLR_update( double deltaS ){
 // Get the modified weight of a sector
 double LLR_weight( sector ){
   double distance, logweight, weight, a;
-  #ifdef LLR_CLOSE
-  a = 2*llr_a;
-  #else
-  a = 4*llr_a;
-  #endif
   distance = sector - llr_target-0.5;
   logweight = -(distance*distance-0.25)*llr_gaussian_weight;
   if( distance < 0 ){
-    logweight += a;
+    logweight += 0.5*llr_a;
   } else {
-    logweight -= a;
+    logweight -= 0.5*llr_a;
   }
   weight = exp(logweight);
   return weight;
@@ -407,7 +402,7 @@ double LLR_weight( sector ){
 int current_sector = 0;
 int worm_close_accept(){
   int accept = 1;
-#ifdef LLR_CLOSE
+#ifdef LLR_WORM_CLOSE
   int sector;
   double current_distance, previous_distance, weight;
   sector = count_negative_loops();
@@ -422,6 +417,7 @@ int worm_close_accept(){
   return accept;
 }
 
+
 double remove_link_weight(t, x){
   double weight;
   int dir = diraclink[t][x];
@@ -429,7 +425,7 @@ double remove_link_weight(t, x){
   if( dir == TUP ) weight *= exp(-mu);
   if( dir == TDN ) weight *= exp(mu);
 
-#ifdef LLR
+#ifdef LLR_WORM_STEP
   int tl = t, xl = x, sign = -1;
   do {
     dir = diraclink[tl][xl];
@@ -441,12 +437,15 @@ double remove_link_weight(t, x){
     tl = tdir(tl, dir); xl = xdir(xl, dir);
   } while( t != tl || x != xl );
   if( sign == -1 ){
-    weight *= LLR_weight(current_sector-1)/LLR_weight(current_sector);
+    double llr_w = LLR_weight(current_sector-1)/LLR_weight(current_sector);
+    weight *= llr_w;
+    //printf("remove %g (a=%g) from %d\n", llr_w, llr_a, current_sector);
   }
 #endif
 
   return weight;
 }
+
 
 double add_link_weight(t, x, dir){
   double weight;
@@ -454,7 +453,7 @@ double add_link_weight(t, x, dir){
   if( dir == TUP ) weight *= exp(mu);
   if( dir == TDN ) weight *= exp(-mu);
 
-#ifdef LLR
+#ifdef LLR_WORM_STEP
   int t0, x0, tl, xl, sign= -1;
   t0 = tl = tdir(t, dir); x0 = xl = xdir(x, dir);
   do {
@@ -479,7 +478,7 @@ double add_link_weight(t, x, dir){
 }
 
 void update_accepted(){
-#ifdef LLR
+#ifdef LLR_WORM_STEP
   current_sector = count_negative_loops();
 #endif
 }
@@ -533,7 +532,6 @@ int update_dirac_background(){
     //starting point of the correlator
 
     p = remove_link_weight(t,x);
-    
     if( mersenne() < p ){
       dir = diraclink[t][x];
       t0 = tdir(t, dir), x0 = xdir(x, dir);
@@ -592,7 +590,7 @@ int update_dirac_background(){
               n_monomers += 1;
               update_accepted();
               if( worm_close_accept() ){
-                break;
+              break;
               } else {
                 field[t][x] = 0;
                 diraclink[t][x] = 10;
@@ -638,7 +636,7 @@ int update_dirac_background(){
           diraclink[t][x] = dir;
           update_accepted();
           if( worm_close_accept() ){
-            break;
+          break;
           } else {
             diraclink[t][x] = 10;
           }
@@ -768,10 +766,10 @@ int update()
   /* local updates */
   if( mersenne() < 0.0 ){
     do{
-      changes += update_monomer();
-      changes += update_link();
-      changes += plaquette_update();
-      changes += flip_loop();
+    changes += update_monomer();
+    changes += update_link();
+    changes += plaquette_update();
+    changes += flip_loop();
     } while( worm_close_accept() == 0 );
   } else {
     /* Worm update */
@@ -1247,7 +1245,7 @@ int main(int argc, char* argv[])
   /* fill monomers and links */
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
     field[t][x] = 0;
-    diraclink[t][x] = TUP;
+    diraclink[t][x] = 1 + 2*x%2;
   }
 
   int ** field_copy = malloc( NT*sizeof(int *) );
