@@ -1143,7 +1143,10 @@ int main(int argc, char* argv[])
 
 #ifdef LLR
   get_int("Target LLR sector", &llr_target);
+  get_double("llr initial a", &llr_a);
   get_int("Updates / LLR update", &llr_update_every);
+  get_double("llr step size", &llr_alpha);
+  get_int("LLR steps with dampened decay", &llr_constant_steps);
 #endif
 
   /* "Warm up" the rng generator */
@@ -1161,6 +1164,8 @@ int main(int argc, char* argv[])
 #ifdef LLR
   printf(" LLR target %d\n", llr_target );
   printf(" LLR updated every %ld updates\n", llr_update_every );
+  printf(" LLR step size\n", llr_a );
+  printf(" LLr %d first steps with dampened decay\n", llr_constant_steps );
 #endif
   /* Allocate location and field arrays */
   field = malloc( NT*sizeof(int *) );
@@ -1247,9 +1252,7 @@ int main(int argc, char* argv[])
 
 #ifdef LLR
   {
-    double weight_parameter = llr_gaussian_weight;
     int sector=0;
-    llr_gaussian_weight = 3;
     for (i=1;; i++) {
       // In LLR, wait for the target sector to be reached before
       // starting measurement runs
@@ -1265,9 +1268,9 @@ int main(int argc, char* argv[])
         exit(1);
       }
     }
-    llr_gaussian_weight = weight_parameter;
     printf( "Reached LLR target sector in %d thermalisation updates\n", i );
   }
+  llr_accepted = 0;
 #endif
 
   for (i=1; i<n_loops+1; i++) {
