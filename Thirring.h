@@ -15,8 +15,8 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 4
-#define NX 4
+#define NT 32
+#define NX 32
 
 #define ND 2
 #define NDIRS (2*ND)
@@ -28,9 +28,9 @@
 
 #define VOLUME (NT*NX)
 
-//#define ANTISYMMETRIC //Antisymmetric boundaries
-//#define SYMMETRIC     //implemented in Thirring_hop
-#define OPENX       //open in space, (anti)symmetric in time
+#define ANTISYMMETRIC //Antisymmetric boundaries
+//#define SYMMETRIC   //implemented in Thirring_hop
+//#define OPENX       //open in space, (anti)symmetric in time
 
 
 /* Enumerate possible values for a field */

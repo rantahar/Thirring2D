@@ -20,7 +20,7 @@ double mu;
 
 /* LLR parameters */
 int llr_target;
-double llr_gaussian_weight = 0.5; // Used in thermalisation even with wall
+double llr_gaussian_weight = 0.1; // Used in thermalisation even with wall
 double llr_a = 0;             // The measurable a in the llr method
 int llr_constant_steps = 100; // Number of constant steps at start
 double llr_alpha = 0.1;       // Step size
@@ -425,7 +425,7 @@ double LLR_weight( sector ){
 int current_sector = 0;
 int worm_close_accept(){
   int accept = 1;
-#ifdef LLR_WORM_CLOSE
+#ifdef LLR
   int sector;
   double current_distance, previous_distance, weight;
   sector = count_negative_loops();
@@ -447,25 +447,6 @@ double remove_link_weight(t, x){
   weight = 2;    //There is always a factor 0.5 for each link
   if( dir == TUP ) weight *= exp(-mu);
   if( dir == TDN ) weight *= exp(mu);
-
-#ifdef LLR_WORM_STEP
-  int tl = t, xl = x, sign = -1;
-  do {
-    dir = diraclink[tl][xl];
-    if( dir == NDIRS || dir == 10 ){
-      sign = 1;
-      break;
-    }
-    sign *= linksign(tl,xl,dir);
-    tl = tdir(tl, dir); xl = xdir(xl, dir);
-  } while( t != tl || x != xl );
-  if( sign == -1 ){
-    double llr_w = LLR_weight(current_sector-1)/LLR_weight(current_sector);
-    weight *= llr_w;
-    //printf("remove %g (a=%g) from %d\n", llr_w, llr_a, current_sector);
-  }
-#endif
-
   return weight;
 }
 
@@ -475,37 +456,8 @@ double add_link_weight(t, x, dir){
   weight = 0.5;    //There is always a factor 0.5 for each link
   if( dir == TUP ) weight *= exp(mu);
   if( dir == TDN ) weight *= exp(-mu);
-
-#ifdef LLR_WORM_STEP
-  int t0, x0, tl, xl, sign= -1;
-  t0 = tl = tdir(t, dir); x0 = xl = xdir(x, dir);
-  do {
-    dir = diraclink[tl][xl];
-    if( dir == NDIRS ){
-      sign = 1;
-      break;
-    }
-    sign *= linksign(tl,xl,dir);
-    tl = tdir(tl, dir); xl = xdir(xl, dir);
-    if( t0 == tl && x0 == xl ){
-      sign = 1;
-      break;
-    }
-  } while( t != tl || x != xl );
-  if( sign == -1 ){
-    weight *= LLR_weight(current_sector+1)/LLR_weight(current_sector);
-  }
-#endif
-
- return weight;
+  return weight;
 }
-
-void update_accepted(){
-#ifdef LLR_WORM_STEP
-  current_sector = count_negative_loops();
-#endif
-}
-
 
 // A step in the worm update that updates monomers
 void dirac_worm_add_monomer( int *t, int *x ){
@@ -524,7 +476,6 @@ void dirac_worm_add_monomer( int *t, int *x ){
         diraclink[t2][x2] = 10;
         *t=t2; *x=x2;
         n_monomers += 1;
-        update_accepted();
       }
     }
   } else if( field[t2][x2] == MONOMER ){
@@ -535,7 +486,6 @@ void dirac_worm_add_monomer( int *t, int *x ){
       diraclink[t2][x2] = 10;
       *t=t2; *x=x2;
       n_monomers -= 1;
-      update_accepted();
     }
   }
 }
@@ -545,10 +495,8 @@ int update_dirac_background(){
   int t0, x0, t, x, dir;
   double p;
   int started = 0;
-#ifdef LLR_WORM_CLOSE
+#ifdef LLR
   save_field();
-#elif LLR_WORM_STEP
-  update_accepted();
 #endif
 
   //Pick a site
@@ -565,7 +513,6 @@ int update_dirac_background(){
       t0 = tdir(t, dir), x0 = xdir(x, dir);
       diraclink[t][x] = 10;
       started = 1;
-      update_accepted();
     }
   } else if( field[t][x] == MONOMER ){
     // Selected a mass monomer. We just remove the monomer,
@@ -616,7 +563,6 @@ int update_dirac_background(){
               field[t][x] = MONOMER;
               diraclink[t][x] = NDIRS;
               n_monomers += 1;
-              update_accepted();
               break;
             }
           }
@@ -656,7 +602,6 @@ int update_dirac_background(){
         p = add_link_weight(t,x,dir);
         if( mersenne() < p ){
           diraclink[t][x] = dir;
-          update_accepted();
           break;
         }
   
@@ -686,14 +631,13 @@ int update_dirac_background(){
             diraclink[t][x] = dir;
             diraclink[t3][x3] = 10;
             t=t3; x=x3;
-            update_accepted();
           }
         }
       }
     }
   }
 
-#ifdef LLR_WORM_CLOSE
+#ifdef LLR
   if( ! worm_close_accept() ){
     restore_field();
     return 0;
@@ -1203,7 +1147,7 @@ int main(int argc, char* argv[])
 
 #ifdef LLR
   get_int("Target LLR sector", &llr_target);
-  get_int("Updates / LLr update", &llr_update_every);
+  get_int("Updates / LLR update", &llr_update_every);
 #endif
 
   /* "Warm up" the rng generator */
