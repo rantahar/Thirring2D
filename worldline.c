@@ -21,7 +21,6 @@ double mu;
 /* LLR parameters */
 int llr_target;
 double llr_gaussian_weight = 2; // Used in thermalisation even with wall
-double worm_gaussian_weight = 1; // Used in thermalisation even with wall
 double llr_a = 0;         // The measurable a in the llr method
 double llr_alpha = 2;     // step size
 
