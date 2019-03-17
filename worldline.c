@@ -420,7 +420,8 @@ double LLR_weight( sector ){
 }
 
 int current_sector = 0;
-int worm_close_accept(){
+int llr_accepted=0;
+int llr_accept(){
   int accept = 1;
 #ifdef LLR
   int sector;
@@ -430,6 +431,7 @@ int worm_close_accept(){
   if( mersenne() < weight ){
     accept = 1;
     current_sector = sector;
+    llr_accepted += 1;
   } else {
     accept = 0;
   }
@@ -1319,6 +1321,10 @@ int main(int argc, char* argv[])
       if((i%(n_average*n_measure))==0){
         printf("\n%d, %d updates in %.3g seconds\n", i, n_average*n_measure, 1e-6*updatetime);
         printf("%d, %d measurements in %.3g seconds\n", i, n_average, 1e-6*measuretime);
+        #ifdef LLR
+        printf("%d, acceptance %.3g \n", i, (double)llr_accepted/(double)i);
+        #endif
+        
         updatetime = 0; measuretime = 0;
 
         printf("MONOMERS %g \n", ((double)sum_monomers)/n_average);
