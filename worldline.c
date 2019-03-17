@@ -494,9 +494,6 @@ int update_dirac_background(){
   int t0, x0, t, x, dir;
   double p;
   int started = 0;
-#ifdef LLR
-  save_field();
-#endif
 
   //Pick a site
   t= mersenne()*NT, x=mersenne()*NX;
@@ -636,13 +633,6 @@ int update_dirac_background(){
     }
   }
 
-#ifdef LLR
-  if( ! worm_close_accept() ){
-    restore_field();
-    return 0;
-  }
-#endif
-
   return 1;
 }
 
@@ -730,21 +720,26 @@ int flip_loop(){
 int update()
 {
   int changes=0;
+#ifdef LLR
+  save_field();
+#endif
 
   /* local updates */
   if( mersenne() < 0.8 ){
-    save_field();
     changes += update_monomer();
     changes += update_link();
     changes += plaquette_update();
     changes += flip_loop();
-    if( ! worm_close_accept() ){
-      restore_field();
-    }
   } else {
     /* Worm update */
     changes += update_dirac_background();
   }
+
+#ifdef LLR
+  if( ! llr_accept() ){
+    restore_field();
+  }
+#endif
 
   return changes;
 }
