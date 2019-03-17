@@ -21,8 +21,9 @@ double mu;
 /* LLR parameters */
 int llr_target;
 double llr_gaussian_weight = 0.5; // Used in thermalisation even with wall
-double llr_a = 0;         // The measurable a in the llr method
-double llr_alpha = 1;     // step size
+double llr_a = 0;             // The measurable a in the llr method
+int llr_constant_steps = 100; // Number of constant steps at start
+double llr_alpha = 0.1;       // Step size
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -399,7 +400,11 @@ int find_link_pointing_at( int t, int x ){
 // number of negative loops
 void LLR_update( double deltaS ){
   static int iter = 1;
-  llr_a -= llr_alpha*deltaS/iter;
+  if( iter < 100 ){ 
+    llr_a -= llr_alpha*deltaS;
+  } else {
+    llr_a -= llr_alpha*deltaS/(iter-100+1);
+  }
   iter ++;
 }
 
@@ -1345,7 +1350,6 @@ int main(int argc, char* argv[])
       if((i%llr_update_every*n_measure)==0){
         double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/(double)llr_update_every;
         LLR_update( llr_dS );
-        printf( "LLR update %d %d %f\n", sectors[llr_target],sectors[llr_target+1], llr_dS );
         sectors[llr_target] = 0;
         sectors[llr_target+1] = 0;
         sum_llr_a += llr_a;
