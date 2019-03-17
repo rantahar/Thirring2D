@@ -784,7 +784,7 @@ int update()
   int changes=0;
 
   /* local updates */
-  if( mersenne() < 0.0 ){
+  if( mersenne() < 0.8 ){
     save_field();
     changes += update_monomer();
     changes += update_link();
