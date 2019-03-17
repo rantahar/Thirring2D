@@ -403,12 +403,11 @@ double LLR_weight( sector ){
   } else {
 
     distance = sector - llr_target-0.5;
-    logweight = -distance*distance*llr_gaussian_weight;
+    logweight = -(distance*distance-0.25)*llr_gaussian_weight;
     if( distance < 0 ){
       logweight += 2*llr_a;
     } else {
       logweight -= 2*llr_a;
-
     }
     weight = exp(logweight);
     return weight;
