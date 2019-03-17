@@ -451,7 +451,6 @@ double remove_link_weight(t, x){
     tl = tdir(tl, dir); xl = xdir(xl, dir);
   } while( t != tl || x != xl );
   if( sign == -1 ){
-    int current_sector = count_negative_loops();
     weight *= LLR_weight(current_sector-1)/LLR_weight(current_sector);
   }
 #endif
@@ -482,12 +481,17 @@ double add_link_weight(t, x, dir){
     }
   } while( t != tl || x != xl );
   if( sign == -1 ){
-    int current_sector = count_negative_loops();
     weight *= LLR_weight(current_sector+1)/LLR_weight(current_sector);
   }
 #endif
 
  return weight;
+}
+
+void update_accepted(){
+#ifdef LLR
+  current_sector = count_negative_loops();
+#endif
 }
 
 
@@ -508,6 +512,7 @@ void dirac_worm_add_monomer( int *t, int *x ){
         diraclink[t2][x2] = 10;
         *t=t2; *x=x2;
         n_monomers += 1;
+        update_accepted();
       }
     }
   } else if( field[t2][x2] == MONOMER ){
@@ -518,6 +523,7 @@ void dirac_worm_add_monomer( int *t, int *x ){
       diraclink[t2][x2] = 10;
       *t=t2; *x=x2;
       n_monomers -= 1;
+      update_accepted();
     }
   }
 }
@@ -543,6 +549,7 @@ int update_dirac_background(){
       t0 = tdir(t, dir), x0 = xdir(x, dir);
       diraclink[t][x] = 10;
       started = 1;
+      update_accepted();
     }
   } else if( field[t][x] == MONOMER ){
     // Selected a mass monomer. We just remove the monomer,
@@ -593,6 +600,7 @@ int update_dirac_background(){
               field[t][x] = MONOMER;
               diraclink[t][x] = NDIRS;
               n_monomers += 1;
+              update_accepted();
               if( worm_close_accept() ){
                 break;
               } else {
@@ -638,6 +646,7 @@ int update_dirac_background(){
         p = add_link_weight(t,x,dir);
         if( mersenne() < p ){
           diraclink[t][x] = dir;
+          update_accepted();
           if( worm_close_accept() ){
             break;
           } else {
@@ -671,6 +680,7 @@ int update_dirac_background(){
             diraclink[t][x] = dir;
             diraclink[t3][x3] = 10;
             t=t3; x=x3;
+            update_accepted();
           }
         }
       }
