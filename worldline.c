@@ -714,6 +714,9 @@ int flip_loop(){
   return changes;
 }
 
+
+
+
 /* A full update function. A single worm update followed by a number of random
    link and monomer updates */
 int update()
