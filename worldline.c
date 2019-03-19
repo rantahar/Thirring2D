@@ -396,6 +396,108 @@ int find_link_pointing_at( int t, int x ){
 
 
 
+#ifdef WANGLANDAU
+int wl_iteration = 1;
+double WangLaundau_F[MAX_SECTOR];
+
+void WangLaundau_setup( char * init_parameter_filename){
+  printf(" %s \n",init_parameter_filename);
+  if( strcmp(init_parameter_filename,"none")!=0 ) {
+    FILE * config_file;
+    printf(" Reading initial free energy\n" );
+  
+    config_file = fopen(init_parameter_filename,"rb");
+    double * buffer = malloc((MAX_SECTOR+1)*sizeof(double));
+    if (config_file){
+      fread(buffer, (MAX_SECTOR+1), sizeof(double), config_file);
+      fclose(config_file);
+    } else {
+      printf("Could not read start weights\n");
+      exit(1);
+    }
+    for (int s=0; s<MAX_SECTOR; s++)
+      WangLaundau_F[s] = buffer[s];
+    wl_iteration = buffer[MAX_SECTOR];
+    free(buffer);
+    printf(" Continuing from step %d\n", wl_iteration );
+  } else {
+    printf(" Restart free energy from 0\n" );
+    for( int i=0; i<MAX_SECTOR; i++){
+      WangLaundau_F[i]=0;
+    }
+  }
+}
+
+void WangLaundau_write_energy(){
+  char filename[100];
+  FILE * config_file;
+  sprintf(filename, "Wang_Landau_F_%dx%d_U%.5g_m%.5g_mu%.5g",NT,NX,U,m,mu);
+
+  double * buffer = malloc((MAX_SECTOR+1)*sizeof(double));
+  for (int s=0; s<MAX_SECTOR; s++)
+    buffer[s] = WangLaundau_F[s];
+  buffer[MAX_SECTOR] = wl_iteration;
+  
+  config_file = fopen(filename,"wb");
+  if (config_file){
+    fwrite(buffer, (MAX_SECTOR+1), sizeof(double), config_file);
+    fclose(config_file);
+  } else {
+    printf("Could not write configuration\n");
+    exit(1);
+  }
+  free(buffer);
+}
+
+// Update the free energy in the Wang-Landau algorithm
+void WangLaundau_update(sector){
+  double step = llr_alpha*llr_constant_steps/(wl_iteration+llr_constant_steps);
+  if( sector > 0 ){
+    WangLaundau_F[sector] += step;
+  } else {
+    // Avoid numerical instabilities by fixing sector 0.
+    // Will obviously fail if sector 0 has no weight
+    for( int i=1; i<MAX_SECTOR; i++){
+      WangLaundau_F[i] -= step;
+    }
+  }
+  wl_iteration ++;
+}
+
+
+
+double WangLaundau_weight(new_sector,old_sector){
+  double weight;
+  weight = exp(-WangLaundau_F[new_sector]+WangLaundau_F[old_sector]);
+  return weight;
+}
+
+int current_sector = 0;
+int llr_accepted=0;
+int sector_changes=0;
+int llr_accept(){
+  int accept = 1;
+  int sector;
+  double weight;
+  sector = count_negative_loops();
+  if( sector != current_sector ){
+    weight = WangLaundau_weight(sector,current_sector);
+    if( mersenne() < weight ){
+      sector_changes += 1;
+      accept = 1;
+      current_sector = sector;
+    } else {
+      accept = 0;
+    }
+  }
+  if( accept ){
+    llr_accepted += 1;
+  }
+  return accept;
+}
+
+#elif LLR
+
 // In LLR, modify the acceptance rate based on the
 // number of negative loops
 void LLR_update( double deltaS ){
@@ -422,21 +524,33 @@ double LLR_weight( sector ){
 /* Check wether to accept a configuration */
 int current_sector = 0;
 int llr_accepted=0;
+int sector_changes=0;
 int llr_accept(){
   int accept = 1;
   int sector;
   double current_distance, previous_distance, weight;
   sector = count_negative_loops();
-  weight = LLR_weight(sector)/LLR_weight(current_sector);
-  if( mersenne() < weight ){
-    accept = 1;
-    current_sector = sector;
+  if( sector != current_sector ){
+    weight = LLR_weight(sector)/LLR_weight(current_sector);
+    if( mersenne() < weight ){
+      sector_changes += 1;
+      accept = 1;
+      current_sector = sector;
+    } else {
+      accept = 0;
+    }
+  }
+  if( accept ){
     llr_accepted += 1;
-  } else {
-    accept = 0;
   }
   return accept;
 }
+
+#else
+int llr_accept(){
+  return 1;
+}
+#endif
 
 /* The propability of removing a link */
 double remove_link_weight(t, x){
@@ -722,9 +836,7 @@ int flip_loop(){
 int update()
 {
   int changes=0;
-#ifdef LLR
   save_field();
-#endif
 
   /* local updates */
   if( mersenne() < 0.8 ){
@@ -737,11 +849,9 @@ int update()
     changes += update_dirac_background();
   }
 
-#ifdef LLR
   if( ! llr_accept() ){
     restore_field();
   }
-#endif
 
   return changes;
 }
@@ -1118,6 +1228,15 @@ void get_long( char * name, long * dest ){
   }
 }
 
+void get_char( char * name, char * dest ){
+  printf(" %s :", name);
+  if( scanf("%s", dest) == 0 ){
+    char message[60];
+    sprintf(message, "Missing parameter %s\n", name);
+    errormessage(message);
+  }
+} 
+
 
 /* Main function
  */
@@ -1129,6 +1248,7 @@ int main(int argc, char* argv[])
 
   int i,n_loops,n_measure,n_average,llr_update_every;
   long seed;
+  char init_parameter_filename[100];
 
   /* Read in the input */
   get_int("Number of updates", &n_loops);
@@ -1141,12 +1261,16 @@ int main(int argc, char* argv[])
 
   get_long("Random seed", &seed);
 
-#ifdef LLR
-  get_int("Target LLR sector", &llr_target);
-  get_double("llr initial a", &llr_a);
-  get_int("Updates / LLR update", &llr_update_every);
-  get_double("llr step size", &llr_alpha);
+#ifdef WANGLANDAU
+  get_double("Wang Landau step size", &llr_alpha);
+  get_int("Wang Landau steps with dampened decay", &llr_constant_steps);
+  get_char(" Initial values file : ", init_parameter_filename);
+#elif LLR
+  get_double("LLR step size", &llr_alpha);
   get_int("LLR steps with dampened decay", &llr_constant_steps);
+  get_int("Target LLR sector", &llr_target);
+  get_double("LLR initial a", &llr_a);
+  get_int("Updates / LLR update", &llr_update_every);
 #endif
 
   /* "Warm up" the rng generator */
@@ -1154,6 +1278,7 @@ int main(int argc, char* argv[])
   for (i=0; i<543210; i++) mersenne();
 
   printf(" \n++++++++++++++++++++++++++++++++++++++++++\n");
+  //printf(" Git commit ID GIT_COMMIT_ID  \n");
   printf(" 2D Thirring model, ( %d , %d ) lattice\n", NT, NX );
   printf(" %d updates per measurements\n", n_measure );
   printf(" m %f \n", m);
@@ -1161,10 +1286,14 @@ int main(int argc, char* argv[])
   printf(" mu %f \n", mu);
   printf(" Size of fluctuation matrix %d\n", max_changes );
   printf(" Random seed %ld\n", seed );
-#ifdef LLR
+#ifdef WANGLANDAU
+  printf(" Wang Landau step size %g\n", llr_alpha );
+  printf(" Wang Landau %d first steps with dampened decay\n", llr_constant_steps );
+  printf(" Wang Landau initialize from %s\n", init_parameter_filename );
+#elif LLR
   printf(" LLR target %d\n", llr_target );
   printf(" LLR updated every %ld updates\n", llr_update_every );
-  printf(" LLR step size\n", llr_a );
+  printf(" LLR step size %g\n", llr_alpha );
   printf(" LLr %d first steps with dampened decay\n", llr_constant_steps );
 #endif
   /* Allocate location and field arrays */
@@ -1260,7 +1389,7 @@ int main(int argc, char* argv[])
       update();
   
       sector = count_negative_loops();
-      if( sector == llr_target ) {
+      if( sector == llr_target || sector == llr_target+1 ) {
         break;
       }
       if( i== n_loops ){
@@ -1271,6 +1400,12 @@ int main(int argc, char* argv[])
     printf( "Reached LLR target sector in %d thermalisation updates\n", i );
   }
   llr_accepted = 0;
+  sector_changes = 0;
+
+#elif WANGLANDAU
+
+  WangLaundau_setup(init_parameter_filename);
+
 #endif
 
   for (i=1; i<n_loops+1; i++) {
@@ -1287,9 +1422,12 @@ int main(int argc, char* argv[])
       gettimeofday(&start,NULL);
 
       int sector = count_negative_loops();
-      sectors[sector] += 1;
+      #ifdef WANGLANDAU
+      // Update the free energy in the sector
+      WangLaundau_update(sector);
 
-      #ifdef LLR
+      #elif LLR
+      // Update the LLR transition propability
       if((i%llr_update_every*n_measure)==0){
         double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/(double)llr_update_every;
         LLR_update( llr_dS );
@@ -1297,6 +1435,15 @@ int main(int argc, char* argv[])
         sectors[llr_target+1] = 0;
         sum_llr_a += llr_a;
       }
+
+      #else
+      // Just count hits to each sector
+      sectors[sector] += 1;
+
+      #endif
+
+      #ifdef LLR
+      
       #endif
 
       int sign = 1-(sector%2)*2;
@@ -1321,8 +1468,9 @@ int main(int argc, char* argv[])
       if((i%(n_average*n_measure))==0){
         printf("\n%d, %d updates in %.3g seconds\n", i, n_average*n_measure, 1e-6*updatetime);
         printf("%d, %d measurements in %.3g seconds\n", i, n_average, 1e-6*measuretime);
-        #ifdef LLR
-        printf("%d, acceptance %.3g \n", i, (double)llr_accepted/(double)i);
+        #if defined(WANGLANDAU) || #defined(LLR)
+        printf("%d, acceptance %.3g, sector change rate %.3g \n", i, (double)llr_accepted/(n_average*n_measure), (double)sector_changes/(n_average*n_measure));
+        llr_accepted = 0; sector_changes = 0;
         #endif
         
         updatetime = 0; measuretime = 0;
@@ -1340,6 +1488,11 @@ int main(int argc, char* argv[])
         double llr_a_ave = sum_llr_a/n_average*llr_update_every;
         printf("LLR a_%d = %g, exp(a) = %g\n", llr_target, llr_a_ave, exp(llr_a_ave));
         sum_llr_a = 0;
+        #elif WANGLANDAU
+        for(int s=0; s<MAX_SECTOR; s++){
+          printf("WANGLANDAU SECTOR %d %g \n", s, WangLaundau_F[s]);
+        }
+        WangLaundau_write_energy();
         #else
         for(int s=0; s<MAX_SECTOR; s++){
           printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
