@@ -407,18 +407,17 @@ void WangLaundau_setup( char * init_parameter_filename){
     printf(" Reading initial free energy\n" );
   
     config_file = fopen(init_parameter_filename,"rb");
-    double * buffer = malloc((MAX_SECTOR+1)*sizeof(double));
     if (config_file){
-      fread(buffer, (MAX_SECTOR+1), sizeof(double), config_file);
+      for( int s=0; s<MAX_SECTOR; s++){
+        fscanf(config_file, "%lf\n", &WangLaundau_F[s]);
+        printf("%d %g\n",s, WangLaundau_F[s]);
+      }
+      fscanf(config_file, "%d\n", &wl_iteration);
       fclose(config_file);
     } else {
       printf("Could not read start weights\n");
       exit(1);
     }
-    for (int s=0; s<MAX_SECTOR; s++)
-      WangLaundau_F[s] = buffer[s];
-    wl_iteration = buffer[MAX_SECTOR];
-    free(buffer);
     printf(" Continuing from step %d\n", wl_iteration );
   } else {
     printf(" Restart free energy from 0\n" );
@@ -433,20 +432,17 @@ void WangLaundau_write_energy(){
   FILE * config_file;
   sprintf(filename, "Wang_Landau_F_%dx%d_U%.5g_m%.5g_mu%.5g",NT,NX,U,m,mu);
 
-  double * buffer = malloc((MAX_SECTOR+1)*sizeof(double));
-  for (int s=0; s<MAX_SECTOR; s++)
-    buffer[s] = WangLaundau_F[s];
-  buffer[MAX_SECTOR] = wl_iteration;
-  
   config_file = fopen(filename,"wb");
   if (config_file){
-    fwrite(buffer, (MAX_SECTOR+1), sizeof(double), config_file);
+    for( int s=0; s<MAX_SECTOR; s++){
+      fprintf(config_file, "%g\n", WangLaundau_F[s]);
+    }
+    fprintf(config_file, "%d\n", wl_iteration);
     fclose(config_file);
   } else {
     printf("Could not write configuration\n");
     exit(1);
   }
-  free(buffer);
 }
 
 // Update the free energy in the Wang-Landau algorithm
