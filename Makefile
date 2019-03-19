@@ -26,7 +26,13 @@ worldline_llr.o: worldline.c $(DEPS)
 	$(CC) $(CFLAGS) -DLLR -c -o $@ $< $(CFLAGS)
 
 worldline_llr: worldline_llr.o mersenne_inline.o  $(DEPS)
-	$(CC) $(CFLAGS) -DLLR -o worldline_llr worldline_llr.o mersenne_inline.o -llapack $(LIB)
+	$(CC) $(CFLAGS) -DLLR -o worldline_llr worldline_llr.o mersenne_inline.o $(LIB)
+
+worldline_WL.o: worldline.c $(DEPS)
+	$(CC) $(CFLAGS) -DWANGLANDAU -c -o $@ $< $(CFLAGS)
+
+worldline_WL: worldline_WL.o mersenne_inline.o  $(DEPS)
+	$(CC) $(CFLAGS) -DWANGLANDAU -o worldline_WL worldline_WL.o mersenne_inline.o $(LIB)
 
 
 clean:
