@@ -397,30 +397,22 @@ int find_link_pointing_at( int t, int x ){
 
 
 #ifdef WANGLANDAU
-int wl_iteration = 1;
 double WangLaundau_F[MAX_SECTOR];
+int WangLaundau_iteration[MAX_SECTOR];
+char init_parameter_filename[100];
 
-void WangLaundau_setup( char * init_parameter_filename){
-  printf(" %s \n",init_parameter_filename);
-  if( strcmp(init_parameter_filename,"none")!=0 ) {
-    FILE * config_file;
+void WangLaundau_setup( ){
+  FILE *config_file;
+  config_file = fopen(init_parameter_filename, "rb");
+  if(config_file) {
     printf(" Reading initial free energy\n" );
-  
-    config_file = fopen(init_parameter_filename,"rb");
-    if (config_file){
       for( int s=0; s<MAX_SECTOR; s++){
-        fscanf(config_file, "%lf\n", &WangLaundau_F[s]);
-        printf("%d %g\n",s, WangLaundau_F[s]);
+      fscanf(config_file, "%lf %d\n", &WangLaundau_F[s], &WangLaundau_iteration[s]);
+      printf("%d %g %d\n",s, WangLaundau_F[s], WangLaundau_iteration[s]);
       }
-      fscanf(config_file, "%d\n", &wl_iteration);
       fclose(config_file);
     } else {
-      printf("Could not read start weights\n");
-      exit(1);
-    }
-    printf(" Continuing from step %d\n", wl_iteration );
-  } else {
-    printf(" Restart free energy from 0\n" );
+    printf(" Start free energy from 0\n" );
     for( int i=0; i<MAX_SECTOR; i++){
       WangLaundau_F[i]=0;
     }
@@ -428,16 +420,13 @@ void WangLaundau_setup( char * init_parameter_filename){
 }
 
 void WangLaundau_write_energy(){
-  char filename[100];
   FILE * config_file;
-  sprintf(filename, "Wang_Landau_F_%dx%d_U%.5g_m%.5g_mu%.5g",NT,NX,U,m,mu);
 
-  config_file = fopen(filename,"wb");
+  config_file = fopen(init_parameter_filename,"wb");
   if (config_file){
     for( int s=0; s<MAX_SECTOR; s++){
-      fprintf(config_file, "%g\n", WangLaundau_F[s]);
+      fprintf(config_file, "%g %d\n", WangLaundau_F[s], WangLaundau_iteration[s]);
     }
-    fprintf(config_file, "%d\n", wl_iteration);
     fclose(config_file);
   } else {
     printf("Could not write configuration\n");
@@ -447,17 +436,19 @@ void WangLaundau_write_energy(){
 
 // Update the free energy in the Wang-Landau algorithm
 void WangLaundau_update(sector){
-  double step = llr_alpha*llr_constant_steps/(wl_iteration+llr_constant_steps);
   if( sector > 0 ){
+    double step = llr_alpha*llr_constant_steps/(WangLaundau_iteration[sector]+llr_constant_steps);
     WangLaundau_F[sector] += step;
+    WangLaundau_iteration[sector]++;
   } else {
     // Avoid numerical instabilities by fixing sector 0.
     // Will obviously fail if sector 0 has no weight
     for( int i=1; i<MAX_SECTOR; i++){
+      double step = llr_alpha*llr_constant_steps/(WangLaundau_iteration[0]+llr_constant_steps);
       WangLaundau_F[i] -= step;
+      WangLaundau_iteration[0]++;
     }
   }
-  wl_iteration ++;
 }
 
 
@@ -1244,7 +1235,6 @@ int main(int argc, char* argv[])
 
   int i,n_loops,n_measure,n_average,llr_update_every;
   long seed;
-  char init_parameter_filename[100];
 
   /* Read in the input */
   get_int("Number of updates", &n_loops);
@@ -1285,7 +1275,7 @@ int main(int argc, char* argv[])
 #ifdef WANGLANDAU
   printf(" Wang Landau step size %g\n", llr_alpha );
   printf(" Wang Landau %d first steps with dampened decay\n", llr_constant_steps );
-  printf(" Wang Landau initialize from %s\n", init_parameter_filename );
+  printf(" Wang Landau weight file %s\n", init_parameter_filename );
 #elif LLR
   printf(" LLR target %d\n", llr_target );
   printf(" LLR updated every %ld updates\n", llr_update_every );
@@ -1400,7 +1390,7 @@ int main(int argc, char* argv[])
 
 #elif WANGLANDAU
 
-  WangLaundau_setup(init_parameter_filename);
+  WangLaundau_setup();
 
 #endif
 
