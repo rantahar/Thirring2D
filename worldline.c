@@ -443,13 +443,13 @@ void WangLaundau_update(sector){
   } else {
     // Avoid numerical instabilities by fixing sector 0.
     // Will obviously fail if sector 0 has no weight
-      double step = llr_alpha*llr_constant_steps/(WangLaundau_iteration[0]+llr_constant_steps);
+    double step = llr_alpha*llr_constant_steps/(WangLaundau_iteration[0]+llr_constant_steps);
     for( int i=1; i<MAX_SECTOR; i++){
       WangLaundau_F[i] -= step;
     }
-      WangLaundau_iteration[0]++;
-    }
+    WangLaundau_iteration[0]++;
   }
+}
 
 
 
@@ -1530,7 +1530,7 @@ int main(int argc, char* argv[])
 
   printf(" ** simulation done\n");
 
-  return(1);
+  return(0);
 }
 
 
