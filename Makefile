@@ -34,6 +34,12 @@ worldline_WL.o: worldline.c $(DEPS)
 worldline_WL: worldline_WL.o mersenne_inline.o  $(DEPS)
 	$(CC) $(CFLAGS) -DWANGLANDAU -o worldline_WL worldline_WL.o mersenne_inline.o $(LIB)
 
+worldline_sector.o: worldline.c $(DEPS)
+	$(CC) $(CFLAGS) -DMEASURE_SECTOR -c -o $@ $< $(CFLAGS)
+
+worldline_sector: worldline_sector.o mersenne_inline.o  $(DEPS)
+	$(CC) $(CFLAGS) -DMEASURE_SECTOR -o worldline_sector worldline_sector.o mersenne_inline.o $(LIB)
+
 
 clean:
 	rm -f *.o  

@@ -406,12 +406,12 @@ void WangLaundau_setup( ){
   config_file = fopen(init_parameter_filename, "rb");
   if(config_file) {
     printf(" Reading initial free energy\n" );
-      for( int s=0; s<MAX_SECTOR; s++){
+    for( int s=0; s<MAX_SECTOR; s++){
       fscanf(config_file, "%lf %d\n", &WangLaundau_F[s], &WangLaundau_iteration[s]);
       printf("%d %g %d\n",s, WangLaundau_F[s], WangLaundau_iteration[s]);
-      }
-      fclose(config_file);
-    } else {
+    }
+    fclose(config_file);
+  } else {
     printf(" Start free energy from 0\n" );
     for( int i=0; i<MAX_SECTOR; i++){
       WangLaundau_F[i]=0;
@@ -533,6 +533,25 @@ int llr_accept(){
   return accept;
 }
 
+#elif MEASURE_SECTOR
+current_sector = 0;
+double llr_accept(){
+  double logweight, weight;
+  int distance, current_distance;
+  int accept;
+  int sector = count_negative_loops();
+  distance = sector - llr_target;
+  current_distance = current_sector - llr_target;
+  logweight = -(distance*distance - current_distance*current_distance)*llr_gaussian_weight;
+  weight = exp(logweight);
+  if( mersenne() < weight ){
+    accept = 1;
+    current_sector = sector;
+  } else {
+    accept = 0;
+  }
+  return accept;
+}
 #else
 int llr_accept(){
   return 1;
@@ -1257,6 +1276,8 @@ int main(int argc, char* argv[])
   get_int("Target LLR sector", &llr_target);
   get_double("LLR initial a", &llr_a);
   get_int("Updates / LLR update", &llr_update_every);
+#elif MEASURE_SECTOR
+  get_int("Target sector", &llr_target);
 #endif
 
   /* "Warm up" the rng generator */
@@ -1281,6 +1302,8 @@ int main(int argc, char* argv[])
   printf(" LLR updated every %ld updates\n", llr_update_every );
   printf(" LLR step size %g\n", llr_alpha );
   printf(" LLr %d first steps with dampened decay\n", llr_constant_steps );
+#elif MEASURE_SECTOR
+  printf(" Measuring expectation values in sector %d\n", llr_target );
 #endif
   /* Allocate location and field arrays */
   field = malloc( NT*sizeof(int *) );
@@ -1398,6 +1421,13 @@ int main(int argc, char* argv[])
 
     /* Update */
     update();
+    
+#ifdef MEASURE_SECTOR
+    /* Only accept as real configuration if it matches the target sector */
+    while(current_sector != llr_target){
+      update();
+    }
+#endif
 
     if((i%n_measure)==0){
 
@@ -1479,6 +1509,7 @@ int main(int argc, char* argv[])
           printf("WANGLANDAU SECTOR %d %g \n", s, WangLaundau_F[s]);
         }
         WangLaundau_write_energy();
+        #elif MEASURE_SECTOR
         #else
         for(int s=0; s<MAX_SECTOR; s++){
           printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
