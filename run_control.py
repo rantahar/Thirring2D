@@ -11,25 +11,32 @@ from calc_sign import calc_sign
 nruns = 160
 nnodes = 40
 
-nupdates = 1000000
+nupdates = 10000
 U = 0.3
 m = 0.1
 mu = 0.6
 X = 32
 T = 32
 
-tolerance = 1e-2
+tolerance = 0.01
+sector_tolerance = 0.001*tolerance
+max_iterations = 100
+
+seed = random.randint(0,99999999)
+
 
 if len(sys.argv) == 2 and sys.argv[1] in ["local", "-l"]:
   use_srun = False
 else :
   use_srun = True
 
-error = 1
-while error > tolerance:
-  for run in range(nruns):
-    seed = random.randint(0,99999999)
-    parameter = f'''{nupdates}
+last = 100
+
+
+def new_parameter_file( run ):
+  global seed
+  seed = seed+1
+  parameter = f'''{nupdates}
 1
 {nupdates}
 {m}
@@ -38,16 +45,24 @@ while error > tolerance:
 {seed}
 0.01
 1000
+{last}
 WL_F_{run}'''
   
-    text_file = open(f"parameter_{run}", "w")
-    text_file.write(parameter)
-    text_file.close()
+  text_file = open(f".parameter_{run}", "w")
+  text_file.write(parameter)
+  text_file.close()
+
+
+error = 1
+for i in range(max_iterations):
+  for run in range(nruns):
+    new_parameter_file( run )
 
   n_running = 0
   processes = []
   for run in range(nruns):
-    with open(f"parameter_{run}", "r") as inputfile:
+    new_parameter_file( run )
+    with open(f".parameter_{run}", "r") as inputfile:
       with open(f"output_{run}", "a+") as outputfile:
         if(use_srun):
           p = subprocess.Popen(["srun","-n1","-N1","./worldline_WL"], stdin=inputfile, stdout=outputfile)
@@ -65,11 +80,17 @@ WL_F_{run}'''
   for p in processes:
     p.wait()
   
+  sign_mean, sign_std, weights = calc_sign(nruns, True)
+  sector_done = weights[:,1]/abs(sign_mean) < tolerance
   
-  sign_mean, sign_std = calc_sign(nruns)
+  for f, done in enumerate(sector_done):
+    if not done:
+      last = f
   
-  print(sign_mean,sign_std)
+  print(sign_mean,sign_std, last)
   sys.stdout.flush()
   
-  error = sign_std/sign_mean
+  error = sign_std/abs(sign_mean)
+  if( error < tolerance ):
+    break
   
