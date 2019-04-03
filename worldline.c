@@ -12,6 +12,7 @@
 
 #include "Thirring.h"
 
+
 /* storage */
 int    ***eta;   //Staggered eta matrix
 double m;
@@ -24,6 +25,7 @@ double llr_gaussian_weight = 5; // Used in thermalisation even with wall
 double llr_a = 0;             // The measurable a in the llr method
 int llr_constant_steps = 100; // Number of (roughly) constant steps at start
 double llr_alpha = 0.1;       // Step size
+int WL_max_sector;       // Maximum sector to sample
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -398,7 +400,7 @@ int find_link_pointing_at( int t, int x ){
 
 #ifdef WANGLANDAU
 double WangLaundau_F[MAX_SECTOR];
-int WangLaundau_iteration[MAX_SECTOR];
+long WangLaundau_iteration;
 char init_parameter_filename[100];
 
 void WangLaundau_setup( ){
@@ -407,14 +409,15 @@ void WangLaundau_setup( ){
   if(config_file) {
     printf(" Reading initial free energy\n" );
     for( int s=0; s<MAX_SECTOR; s++){
-      fscanf(config_file, "%lf %d\n", &WangLaundau_F[s], &WangLaundau_iteration[s]);
-      printf("%d %g %d\n",s, WangLaundau_F[s], WangLaundau_iteration[s]);
+      fscanf(config_file, "%lf\n", &WangLaundau_F[s]);
     }
+    fscanf(config_file, "%ld\n", &WangLaundau_iteration);
     fclose(config_file);
   } else {
     printf(" Start free energy from 0\n" );
     for( int i=0; i<MAX_SECTOR; i++){
       WangLaundau_F[i]=0;
+      WangLaundau_iteration = 0;
     }
   }
 }
@@ -425,8 +428,9 @@ void WangLaundau_write_energy(){
   config_file = fopen(init_parameter_filename,"wb");
   if (config_file){
     for( int s=0; s<MAX_SECTOR; s++){
-      fprintf(config_file, "%g %d\n", WangLaundau_F[s], WangLaundau_iteration[s]);
+      fprintf(config_file, "%g\n", WangLaundau_F[s]);
     }
+    fprintf(config_file, "%d\n", WangLaundau_iteration);
     fclose(config_file);
   } else {
     printf("Could not write configuration\n");
@@ -436,18 +440,14 @@ void WangLaundau_write_energy(){
 
 // Update the free energy in the Wang-Landau algorithm
 void WangLaundau_update(sector){
-  if( sector > 0 ){
-    double step = llr_alpha*llr_constant_steps/(WangLaundau_iteration[sector]+llr_constant_steps);
+  if( sector <= WL_max_sector ){
+    double step = llr_alpha/(WangLaundau_iteration+llr_constant_steps);
     WangLaundau_F[sector] += step;
-    WangLaundau_iteration[sector]++;
-  } else {
-    // Avoid numerical instabilities by fixing sector 0.
-    // Will obviously fail if sector 0 has no weight
-    double step = llr_alpha*llr_constant_steps/(WangLaundau_iteration[0]+llr_constant_steps);
-    for( int i=1; i<MAX_SECTOR; i++){
-      WangLaundau_F[i] -= step;
+    WangLaundau_iteration++;
     }
-    WangLaundau_iteration[0]++;
+  double f0 = WangLaundau_F[0];
+  for( int i=0; i<=WL_max_sector; i++){
+    WangLaundau_F[i] -= f0;
   }
 }
 
@@ -467,6 +467,9 @@ int llr_accept(){
   int sector;
   double weight;
   sector = count_negative_loops();
+  if( sector > WL_max_sector+1 ){
+    return 0;
+  }
   if( sector != current_sector ){
     weight = WangLaundau_weight(sector,current_sector);
     if( mersenne() < weight ){
@@ -845,7 +848,7 @@ int update()
   save_field();
 
   /* local updates */
-  if( mersenne() < 0.8 ){
+  if( mersenne() < 0.1 ){
     changes += update_monomer();
     changes += update_link();
     changes += plaquette_update();
@@ -1269,6 +1272,7 @@ int main(int argc, char* argv[])
 #ifdef WANGLANDAU
   get_double("Wang Landau step size", &llr_alpha);
   get_int("Wang Landau steps with dampened decay", &llr_constant_steps);
+  get_int("Last sector to measure", &WL_max_sector);
   get_char(" Initial values file : ", init_parameter_filename);
 #elif LLR
   get_double("LLR step size", &llr_alpha);
@@ -1279,6 +1283,8 @@ int main(int argc, char* argv[])
 #elif MEASURE_SECTOR
   get_int("Target sector", &llr_target);
 #endif
+
+
 
   /* "Warm up" the rng generator */
   seed_mersenne( seed );
@@ -1458,10 +1464,6 @@ int main(int argc, char* argv[])
 
       #endif
 
-      #ifdef LLR
-      
-      #endif
-
       int sign = 1-(sector%2)*2;
       sum_sign += sign;
       //measure_propagator(); //This includes an invertion and therefore takes time
@@ -1505,7 +1507,7 @@ int main(int argc, char* argv[])
         printf("LLR a_%d = %g, exp(a) = %g\n", llr_target, llr_a_ave, exp(llr_a_ave));
         sum_llr_a = 0;
         #elif WANGLANDAU
-        for(int s=0; s<MAX_SECTOR; s++){
+        for(int s=0; s<=WL_max_sector; s++){
           printf("WANGLANDAU SECTOR %d %g \n", s, WangLaundau_F[s]);
         }
         WangLaundau_write_energy();
