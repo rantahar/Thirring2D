@@ -486,6 +486,10 @@ int llr_accept(){
   return accept;
 }
 
+int negative_loops(){
+  return current_sector;
+}
+
 #elif LLR
 
 // In LLR, modify the acceptance rate based on the
@@ -536,6 +540,10 @@ int llr_accept(){
   return accept;
 }
 
+int negative_loops(){
+  return current_sector;
+}
+
 #elif MEASURE_SECTOR
 current_sector = 0;
 double llr_accept(){
@@ -555,9 +563,18 @@ double llr_accept(){
   }
   return accept;
 }
+
+int negative_loops(){
+  return current_sector;
+}
+
 #else
 int llr_accept(){
   return 1;
+}
+
+int negative_loops(){
+  return count_negative_loops();
 }
 #endif
 
@@ -1443,7 +1460,7 @@ int main(int argc, char* argv[])
 
       gettimeofday(&start,NULL);
 
-      int sector = count_negative_loops();
+      int sector = negative_loops();
       #ifdef WANGLANDAU
       // Update the free energy in the sector
       WangLaundau_update(sector);
