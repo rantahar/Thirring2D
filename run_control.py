@@ -81,7 +81,7 @@ for i in range(max_iterations):
     p.wait()
   
   sign_mean, sign_std, weights = calc_sign(nruns, True)
-  sector_done = weights[:,1]/abs(sign_mean) < tolerance
+  sector_done = weights[:,1]/abs(sign_mean) < sector_tolerance
   
   for f, done in enumerate(sector_done):
     if not done:
