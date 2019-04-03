@@ -859,13 +859,15 @@ int flip_loop(){
 
 /* A full update function. A single worm update followed by a number of random
    link and monomer updates */
-int update()
+int update( int nsteps )
 {
   int changes=0;
   save_field();
 
-  /* local updates */
+  for( int i=0; i<nsteps; i++ ){
+
   if( mersenne() < 0.1 ){
+      /* local updates */
     changes += update_monomer();
     changes += update_link();
     changes += plaquette_update();
@@ -874,10 +876,12 @@ int update()
     /* Worm update */
     changes += update_dirac_background();
   }
+  }
 
   if( ! llr_accept() ){
     restore_field();
   }
+
 
   return changes;
 }
@@ -1443,16 +1447,15 @@ int main(int argc, char* argv[])
   for (i=1; i<n_loops+1; i++) {
 
     /* Update */
-    update();
+    update(n_measure);
     
 #ifdef MEASURE_SECTOR
     /* Only accept as real configuration if it matches the target sector */
     while(current_sector != llr_target){
-      update();
+      update(1);
     }
 #endif
 
-    if((i%n_measure)==0){
 
       /* Time and report */
       gettimeofday(&end,NULL);
@@ -1467,7 +1470,7 @@ int main(int argc, char* argv[])
 
       #elif LLR
       // Update the LLR transition propability
-      if((i%llr_update_every*n_measure)==0){
+    if(i%llr_update_every==0){
         double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/(double)llr_update_every;
         LLR_update( llr_dS );
         sectors[llr_target] = 0;
@@ -1478,7 +1481,10 @@ int main(int argc, char* argv[])
       #else
       // Just count hits to each sector
       sectors[sector] += 1;
-
+    // Measure susceptibility. Updates the configuration without the accept/reject
+    // step required for Wang Landau or LLR
+    if( m == 0 )
+      sum_susc_wb += sign*measure_susceptibility_with_background();
       #endif
 
       int sign = 1-(sector%2)*2;
@@ -1495,16 +1501,15 @@ int main(int argc, char* argv[])
       sum_q += sign*q;
       sum_q2 += sign*q*q; 
 
-      if( m == 0 )
-        sum_susc_wb += sign*measure_susceptibility_with_background();
       gettimeofday(&end,NULL);
       measuretime += 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
 
-      if((i%(n_average*n_measure))==0){
-        printf("\n%d, %d updates in %.3g seconds\n", i, n_average*n_measure, 1e-6*updatetime);
-        printf("%d, %d measurements in %.3g seconds\n", i, n_average, 1e-6*measuretime);
+    if(i%n_average==0){
+      printf("\n%d, %d updates in %.3g seconds\n", i*n_measure, n_average*n_measure, 1e-6*updatetime);
+      printf("%d, %d measurements in %.3g seconds\n", i*n_measure, n_average, 1e-6*measuretime);
+
         #if defined(WANGLANDAU) || #defined(LLR)
-        printf("%d, acceptance %.3g, sector change rate %.3g \n", i, (double)llr_accepted/(n_average*n_measure), (double)sector_changes/(n_average*n_measure));
+      printf("%d, acceptance %.3g, sector change rate %.3g \n", i*n_measure, (double)llr_accepted/n_average, (double)sector_changes/n_average);
         llr_accepted = 0; sector_changes = 0;
         #endif
         
@@ -1545,7 +1550,6 @@ int main(int argc, char* argv[])
       
       gettimeofday(&start,NULL);
     }
-  }
 
   printf(" ** simulation done\n");
 
