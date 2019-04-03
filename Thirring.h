@@ -48,7 +48,7 @@
 #define WITH_MASS_MONOMERS
 #define PROPAGATOR_MATRIX
 
-#define MAX_SECTOR 100
+#define MAX_SECTOR 101
 
 /* Functions in vec_ops.c */
 void vec_zero( double **a );
