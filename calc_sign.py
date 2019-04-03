@@ -33,11 +33,11 @@ def calc_sign( nruns=nruns, weights=False ):
 
   sign_all = wl_w_s.sum(1)
   sign_mean = sign_all.mean()
-  sign_std = sign_all.std()/numpy.sqrt(nruns)
+  sign_std = sign_all.std()/numpy.sqrt(nruns-1)
 
   if(weights):
     wl_w_mean = wl_w.mean(0)
-    wl_w_std = wl_w.std(0)/numpy.sqrt(nruns)
+    wl_w_std = wl_w.std(0)/numpy.sqrt(nruns-1)
     return([sign_mean, sign_std, numpy.array([wl_w_mean, wl_w_std]).T])
   else:
     return([sign_mean, sign_std])

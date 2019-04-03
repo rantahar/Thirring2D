@@ -27,7 +27,7 @@ def calc_sector( nruns=nruns ):
   wl_f = numpy.array(wl_f).astype(numpy.float)
   
   mean = wl_f.mean(0)
-  std = wl_f.std(0)/numpy.sqrt(nruns)
+  std = wl_f.std(0)/numpy.sqrt(nruns-1)
 
   return([mean,std])
   
