@@ -400,10 +400,50 @@ int find_link_pointing_at( int t, int x ){
 
 #ifdef WANGLANDAU
 double WangLaundau_F[MAX_SECTOR];
-long WangLaundau_iteration;
+long WangLaundau_iteration = 0;
 char init_parameter_filename[100];
+int current_sector = 0;
+int llr_accepted=0;
+int sector_changes=0;
 
-void WangLaundau_setup( ){
+void init_sector_weights( double Weights[MAX_SECTOR], int max_init_steps ){
+  for( int i=0; i<MAX_SECTOR; i++){
+    Weights[i]=0.01;
+  }
+  for( int i=0; i<max_init_steps; i++){
+    update(1);
+    Weights[current_sector] += 1;
+    if( Weights[0] > 10000 ){
+      // Effective stepsize is reduced to 0.0001
+      break;
+    }
+  }
+}
+
+void init_free_energy( int max_init_steps ){
+  double Weights[MAX_SECTOR];
+
+  printf(" Initialising free energy by direct measurement\n" );
+  for( int i=0; i<MAX_SECTOR; i++){
+    WangLaundau_F[i]=0;
+  }
+
+  /* Run a couple of Newton steps */
+  for( int i=0; i<2; i++ ){
+    init_sector_weights( Weights, max_init_steps );
+    for( int s=0; s<MAX_SECTOR; s++){
+      double logw = log(Weights[s]/Weights[0]);
+      logw = fmax( logw, -10);
+      WangLaundau_F[s] += logw;
+    }
+  }
+  for( int s=0; s<MAX_SECTOR; s++){
+    printf("INIT SECTOR %d %g %g \n", s, WangLaundau_F[s], Weights[s]);
+  }
+}
+
+
+void WangLaundau_setup( int max_init_steps ){
   FILE *config_file;
   config_file = fopen(init_parameter_filename, "rb");
   if(config_file) {
@@ -413,12 +453,10 @@ void WangLaundau_setup( ){
     }
     fscanf(config_file, "%ld\n", &WangLaundau_iteration);
     fclose(config_file);
-  } else {
-    printf(" Start free energy from 0\n" );
-    for( int i=0; i<MAX_SECTOR; i++){
-      WangLaundau_F[i]=0;
-      WangLaundau_iteration = 0;
     }
+
+  if( WangLaundau_iteration == 0 ) {
+    init_free_energy( max_init_steps );
   }
 }
 
@@ -459,9 +497,7 @@ double WangLaundau_weight(new_sector,old_sector){
   return weight;
 }
 
-int current_sector = 0;
-int llr_accepted=0;
-int sector_changes=0;
+
 int llr_accept(){
   int accept = 1;
   int sector;
@@ -865,7 +901,6 @@ int update( int nsteps )
   save_field();
 
   for( int i=0; i<nsteps; i++ ){
-
   if( mersenne() < 0.1 ){
       /* local updates */
     changes += update_monomer();
@@ -1411,9 +1446,10 @@ int main(int argc, char* argv[])
     sectors[i] = 0;
   double sum_llr_a = 0;
 
-  struct timeval start, end;
-  double updatetime=0, measuretime = 0;
-  gettimeofday(&start,NULL);
+  for( int i=0; i<NX*NT; i++ ){
+    // Thermalise
+    update(1);
+  }
 
 #ifdef LLR
   {
@@ -1440,9 +1476,13 @@ int main(int argc, char* argv[])
 
 #elif WANGLANDAU
 
-  WangLaundau_setup();
+  WangLaundau_setup( n_average*n_measure );
 
 #endif
+
+  struct timeval start, end;
+  double updatetime=0, measuretime = 0;
+  gettimeofday(&start,NULL);
 
   for (i=1; i<n_loops+1; i++) {
 
@@ -1455,7 +1495,6 @@ int main(int argc, char* argv[])
       update(1);
     }
 #endif
-
 
       /* Time and report */
       gettimeofday(&end,NULL);
