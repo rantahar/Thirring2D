@@ -61,7 +61,6 @@ for i in range(max_iterations):
   for run in range(nruns):
     new_parameter_file( run )
 
-  n_running = 0
   processes = []
   for run in range(nruns):
     new_parameter_file( run )
@@ -72,13 +71,11 @@ for i in range(max_iterations):
         else:
           p = subprocess.Popen(["./worldline_WL"], stdin=inputfile, stdout=outputfile)
         processes.append(p)
-        n_running += 1
-    while n_running == nnodes:
-      sleep(0.05)
+    while len(processes) == nnodes:
+      sleep(0.5)
       for p in processes:
         if p.poll() is not None:
-          n_running -= 1
-
+          processes.remove(p)
   
   for p in processes:
     p.wait()
