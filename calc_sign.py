@@ -43,5 +43,8 @@ def calc_sign( nruns=nruns, weights=False ):
     return([sign_mean, sign_std])
   
 if __name__ == "__main__":
-  mean, std = calc_sign()
+  if len(sys.argv) > 1 :
+    nruns = int(sys.argv[1])
+  
+  mean, std = calc_sign( nruns )
   print(f"{mean} {std}")
