@@ -8,15 +8,18 @@ from time import sleep
 
 from calc_sign import calc_sign
 
-nruns = 160
+nruns = 100
 nnodes = 40
 
-nupdates = 10000
+nupdates = 100000
+nmeasure = 10
 U = 0.3
 m = 0.1
 mu = 0.6
 X = 32
 T = 32
+step = 10
+init_nstep = 1000
 
 tolerance = 0.01
 sector_tolerance = 0.001*tolerance
@@ -37,14 +40,14 @@ def new_parameter_file( run ):
   global seed
   seed = seed+1
   parameter = f'''{nupdates}
-1
-{nupdates}
+{nmeasure}
+{int(nupdates/nmeasure)}
 {m}
 {U}
 {mu}
 {seed}
-0.01
-1000
+{step}
+{init_nstep}
 {last}
 WL_F_{run}'''
   
