@@ -1503,31 +1503,32 @@ int main(int argc, char* argv[])
       gettimeofday(&start,NULL);
 
       int sector = negative_loops();
+      int sign = 1-(sector%2)*2;
+      sum_sign += sign;
+
       #ifdef WANGLANDAU
       // Update the free energy in the sector
       WangLaundau_update(sector);
 
       #elif LLR
       // Update the LLR transition propability
-    if(i%llr_update_every==0){
-        double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/(double)llr_update_every;
-        LLR_update( llr_dS );
-        sectors[llr_target] = 0;
-        sectors[llr_target+1] = 0;
-        sum_llr_a += llr_a;
-      }
+      if(i%llr_update_every==0){
+          double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/(double)llr_update_every;
+          LLR_update( llr_dS );
+          sectors[llr_target] = 0;
+          sectors[llr_target+1] = 0;
+          sum_llr_a += llr_a;
+        }
 
       #else
       // Just count hits to each sector
       sectors[sector] += 1;
-    // Measure susceptibility. Updates the configuration without the accept/reject
-    // step required for Wang Landau or LLR
-    if( m == 0 )
-      sum_susc_wb += sign*measure_susceptibility_with_background();
+      // Measure susceptibility. Updates the configuration without the accept/reject
+      // step required for Wang Landau or LLR
+      if( m == 0 )
+        sum_susc_wb += sign*measure_susceptibility_with_background();
       #endif
 
-      int sign = 1-(sector%2)*2;
-      sum_sign += sign;
       //measure_propagator(); //This includes an invertion and therefore takes time
 
       sum_monomers += sign*n_monomers;
