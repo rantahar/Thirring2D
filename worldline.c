@@ -904,6 +904,13 @@ int flip_loop(){
 }
 
 
+/* A number of thermalisation updates without accept/reject */
+void thermalise( int nsteps ){
+  for( int i=0; i<nsteps; i++ ){
+    /* Worm update */
+    update_dirac_background();
+  }
+}
 
 
 /* A full update function. A single worm update followed by a number of random
@@ -1459,11 +1466,6 @@ int main(int argc, char* argv[])
     sectors[i] = 0;
   double sum_llr_a = 0;
 
-  for( int i=0; i<NX*NT; i++ ){
-    // Thermalise
-    update(1);
-  }
-
 #ifdef LLR
   {
     int sector=0;
@@ -1492,6 +1494,9 @@ int main(int argc, char* argv[])
   WangLaundau_setup( n_average*n_measure );
 
 #endif
+
+  // Thermalise
+  thermalise(n_average*n_measure);
 
   struct timeval start, end;
   double updatetime=0, measuretime = 0;
