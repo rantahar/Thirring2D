@@ -400,7 +400,7 @@ int find_link_pointing_at( int t, int x ){
 
 #ifdef WANGLANDAU
 double WangLaundau_F[MAX_SECTOR];
-long WangLaundau_iteration = 0;
+long WangLaundau_iteration[MAX_SECTOR];
 char init_parameter_filename[100];
 int current_sector = 0;
 int llr_accepted=0;
@@ -446,16 +446,21 @@ void init_free_energy( int max_init_steps ){
 void WangLaundau_setup( int max_init_steps ){
   FILE *config_file;
   config_file = fopen(init_parameter_filename, "rb");
+  int initialized = 0;
+  
   if(config_file) {
     printf(" Reading initial free energy\n" );
     for( int s=0; s<MAX_SECTOR; s++){
-      fscanf(config_file, "%lf\n", &WangLaundau_F[s]);
+      fscanf(config_file, "%lf %ld\n", &WangLaundau_F[s], &WangLaundau_iteration[s]);
+      initialized &= WangLaundau_iteration[s];
     }
-    fscanf(config_file, "%ld\n", &WangLaundau_iteration);
     fclose(config_file);
-    }
+  }
 
-  if( WangLaundau_iteration == 0 ) {
+  if( initialized ) {
+    for( int s=0; s<MAX_SECTOR; s++){
+      WangLaundau_iteration[s] = 0;
+    }
     init_free_energy( max_init_steps );
   }
 }
@@ -466,9 +471,8 @@ void WangLaundau_write_energy(){
   config_file = fopen(init_parameter_filename,"wb");
   if (config_file){
     for( int s=0; s<MAX_SECTOR; s++){
-      fprintf(config_file, "%g\n", WangLaundau_F[s]);
+      fprintf(config_file, "%g %d\n", WangLaundau_F[s], WangLaundau_iteration[s]);
     }
-    fprintf(config_file, "%d\n", WangLaundau_iteration);
     fclose(config_file);
   } else {
     printf("Could not write configuration\n");
@@ -479,10 +483,10 @@ void WangLaundau_write_energy(){
 // Update the free energy in the Wang-Landau algorithm
 void WangLaundau_update(sector){
   if( sector <= WL_max_sector ){
-    double step = llr_alpha/(WangLaundau_iteration+llr_constant_steps);
+    double step = llr_alpha/(WangLaundau_iteration[sector]+llr_constant_steps);
     WangLaundau_F[sector] += step;
-    WangLaundau_iteration++;
-    }
+    WangLaundau_iteration[sector]++;
+  }
   double f0 = WangLaundau_F[0];
   for( int i=0; i<=WL_max_sector; i++){
     WangLaundau_F[i] -= f0;
