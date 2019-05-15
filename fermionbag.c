@@ -633,7 +633,7 @@ void measure()
   //print_config();
 #endif
 
-  measure_propagator();
+  measure_propagator( current_sign );
   measure_susceptibility();
 
   measurement++;

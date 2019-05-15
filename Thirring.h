@@ -11,8 +11,8 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 32
-#define NX 32
+#define NT 256
+#define NX 256
 
 #define ND 2
 #define NDIRS (2*ND)
@@ -48,7 +48,7 @@
 #define WITH_MASS_MONOMERS
 #define PROPAGATOR_MATRIX
 
-#define MAX_SECTOR 101
+#define MAX_SECTOR 201
 
 /* Functions in vec_ops.c */
 void vec_zero( double **a );
@@ -76,7 +76,7 @@ double * alloc_field();
 
 
 /* In measurements.c */
-void measure_propagator();
+void measure_propagator( int sign );
 void measure_susceptibility();
 
 

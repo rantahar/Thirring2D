@@ -263,7 +263,7 @@ int move_monomer(){
 
 /* Propagator
  */
-void measure_propagator(){ 
+void measure_propagator( int sign ){
   double prop[NT];
   double j[NT];
   double c[NT];
@@ -278,8 +278,7 @@ void measure_propagator(){
   source = alloc_vector();
   propagator = alloc_vector();
 
-  for( int t1=0;t1<2;t1++) 
-  for( int x1=0;x1<NX;x1++) {
+  for( int t1=0;t1<1;t1++) for( int x1=0;x1<NX;x1++) {
     int bc_dn = 1, bc_up = 1;
     if(t1 == 0) bc_dn = -1;  if(t1 == NT-1) bc_up = -1;
 
@@ -308,12 +307,12 @@ void measure_propagator(){
   }
 
   
-  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, current_sign*prop[t2]/(VOLUME) );
-  for( int t2=0; t2<NT; t2++) printf("Boson %d %g\n", t2, current_sign*boson[t2]/(VOLUME) );
-  for( int t1=0;t1<1;t1++) printf("Charge %d %g\n", t1, current_sign*j[t1]/2 );
-  for( int t1=0;t1<1;t1++)  printf("Qchi %d %g\n", t1, current_sign*c[t1]/2 );
-  //for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, current_sign*q[t1] );
-  printf("Qchi2  %g\n", current_sign*c[0]*c[0]/4 );
+  for( int t2=0; t2<NT; t2++) printf("Propagator %d %g\n", t2, prop[t2]/(VOLUME) );
+  for( int t2=0; t2<NT; t2++) printf("Boson %d %g\n", t2, sign*boson[t2]/(VOLUME) );
+  for( int t1=0;t1<1;t1++) printf("Charge %d %g\n", t1, sign*j[t1]/2 );
+  for( int t1=0;t1<1;t1++)  printf("Qchi %d %g\n", t1, sign*c[t1]/2 );
+  //for( int t1=0;t1<1;t1++)  printf("qchi %d %g\n", t1, sign*q[t1] );
+  printf("Qchi2  %g\n", sign*c[0]*c[0]/4 );
 
   free_vector(source);
   free_vector(propagator);

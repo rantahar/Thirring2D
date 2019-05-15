@@ -1529,8 +1529,6 @@ int main(int argc, char* argv[])
         sum_susc_wb += sign*measure_susceptibility_with_background();
       #endif
 
-      //measure_propagator(); //This includes an invertion and therefore takes time
-
       sum_monomers += sign*n_monomers;
       sum_links += sign*n_links;
 
@@ -1544,14 +1542,16 @@ int main(int argc, char* argv[])
       gettimeofday(&end,NULL);
       measuretime += 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
 
-    if(i%n_average==0){
-      printf("\n%d, %d updates in %.3g seconds\n", i*n_measure, n_average*n_measure, 1e-6*updatetime);
-      printf("%d, %d measurements in %.3g seconds\n", i*n_measure, n_average, 1e-6*measuretime);
+      if(i%n_average==0){
+        printf("\n%d, %d updates in %.3g seconds\n", i*n_measure, n_average*n_measure, 1e-6*updatetime);
+        printf("%d, %d measurements in %.3g seconds\n", i*n_measure, n_average, 1e-6*measuretime);
 
         #if defined(WANGLANDAU) || #defined(LLR)
-      printf("%d, acceptance %.3g, sector change rate %.3g \n", i*n_measure, (double)llr_accepted/n_average, (double)sector_changes/n_average);
+        printf("%d, acceptance %.3g, sector change rate %.3g \n", i*n_measure, (double)llr_accepted/n_average, (double)sector_changes/n_average);
         llr_accepted = 0; sector_changes = 0;
         #endif
+
+        //measure_propagator( 1 ); //This includes an invertion and therefore takes time
         
         updatetime = 0; measuretime = 0;
 
@@ -1560,8 +1560,8 @@ int main(int argc, char* argv[])
         printf("CHARGE %g %g \n", (double)sum_charge/n_average, (double)sum_c2/n_average);
         printf("QCHI %g %g \n", (double)sum_q/n_average, (double)sum_q2/n_average);
         //printf("Susc %g \n", (double)sum_susc/n_average);
-        if( m == 0 )
-          printf("SUSCEPTIBILITY %g \n", (double)sum_susc_wb/n_average);
+        //if( m == 0 )
+        //  printf("SUSCEPTIBILITY %g \n", (double)sum_susc_wb/n_average);
         printf("SIGN %g\n", (double)sum_sign/n_average);
 
         #ifdef LLR
