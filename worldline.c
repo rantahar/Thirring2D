@@ -413,7 +413,7 @@ void init_sector_weights( double Weights[MAX_SECTOR], int max_init_steps ){
   for( int i=0; i<max_init_steps; i++){
     update(1);
     Weights[current_sector] += 1;
-    if( Weights[0] > 10000 ){
+    if( Weights[current_sector] > 10000 ){
       // Effective stepsize is reduced to 0.0001
       break;
     }
@@ -457,12 +457,14 @@ void WangLaundau_setup( int max_init_steps ){
     printf(" Reading initial free energy\n" );
     for( int s=0; s<MAX_SECTOR; s++){
       fscanf(config_file, "%lf %ld\n", &WangLaundau_F[s], &WangLaundau_iteration[s]);
-      initialized &= WangLaundau_iteration[s];
+      if( WangLaundau_iteration[s] > 0 ){
+        initialized = 1;
+      }
     }
     fclose(config_file);
   }
 
-  if( initialized ) {
+  if( initialized == 0 ) {
     for( int s=0; s<MAX_SECTOR; s++){
       WangLaundau_iteration[s] = 0;
     }
@@ -500,7 +502,7 @@ void WangLaundau_update(sector){
     WangLaundau_F[sector] += step;
     WangLaundau_iteration[sector]++;
   }
-  }
+}
 
 
 
@@ -921,7 +923,7 @@ int update( int nsteps )
   save_field();
 
   for( int i=0; i<nsteps; i++ ){
-  if( mersenne() < 0.1 ){
+  if( mersenne() < 0 ){
       /* local updates */
     changes += update_monomer();
     changes += update_link();
@@ -1506,7 +1508,7 @@ int main(int argc, char* argv[])
 
     /* Update */
     update(n_measure);
-    
+
 #ifdef MEASURE_SECTOR
     /* Only accept as real configuration if it matches the target sector */
     while(current_sector != llr_target){
@@ -1514,100 +1516,100 @@ int main(int argc, char* argv[])
     }
 #endif
 
-      /* Time and report */
-      gettimeofday(&end,NULL);
-      updatetime += 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
+    /* Time and report */
+    gettimeofday(&end,NULL);
+    updatetime += 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
 
-      gettimeofday(&start,NULL);
+    gettimeofday(&start,NULL);
 
-      int sector = negative_loops();
-      int sign = 1-(sector%2)*2;
-      sum_sign += sign;
+    int sector = negative_loops();
+    int sign = 1-(sector%2)*2;
+    sum_sign += sign;
 
-      #ifdef WANGLANDAU
-      // Update the free energy in the sector
-      WangLaundau_update(sector);
+    #ifdef WANGLANDAU
+    // Update the free energy in the sector
+    WangLaundau_update(sector);
 
-      #elif LLR
-      // Update the LLR transition propability
-      if(i%llr_update_every==0){
-          double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/(double)llr_update_every;
-          LLR_update( llr_dS );
-          sectors[llr_target] = 0;
-          sectors[llr_target+1] = 0;
-          sum_llr_a += llr_a;
-        }
+    #elif LLR
+    // Update the LLR transition propability
+    if(i%llr_update_every==0){
+      double llr_dS = (double)(sectors[llr_target]-sectors[llr_target+1])/(double)llr_update_every;
+      LLR_update( llr_dS );
+      sectors[llr_target] = 0;
+      sectors[llr_target+1] = 0;
+      sum_llr_a += llr_a;
+    }
 
-      #else
-      // Just count hits to each sector
-      sectors[sector] += 1;
-      // Measure susceptibility. Updates the configuration without the accept/reject
-      // step required for Wang Landau or LLR
-      if( m == 0 )
-        sum_susc_wb += sign*measure_susceptibility_with_background();
+    #else
+    // Just count hits to each sector
+    sectors[sector] += 1;
+    // Measure susceptibility. Updates the configuration without the accept/reject
+    // step required for Wang Landau or LLR
+    if( m == 0 )
+      sum_susc_wb += sign*measure_susceptibility_with_background();
+    #endif
+
+    sum_monomers += sign*n_monomers;
+    sum_links += sign*n_links;
+
+    int c, q;
+    measure_charge(&c, &q);
+    sum_charge += sign*c;
+    sum_c2 += sign*c*c;
+    sum_q += sign*q;
+    sum_q2 += sign*q*q; 
+
+    gettimeofday(&end,NULL);
+    measuretime += 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
+
+    if(i%n_average==0){
+      printf("\n%d, %d updates in %.3g seconds\n", i*n_measure, n_average*n_measure, 1e-6*updatetime);
+      printf("%d, %d measurements in %.3g seconds\n", i*n_measure, n_average, 1e-6*measuretime);
+
+      #if defined(WANGLANDAU) || #defined(LLR)
+      printf("%d, acceptance %.3g, sector change rate %.3g \n", i*n_measure, (double)llr_accepted/n_average, (double)sector_changes/n_average);
+      llr_accepted = 0; sector_changes = 0;
       #endif
 
-      sum_monomers += sign*n_monomers;
-      sum_links += sign*n_links;
-
-      int c, q;
-      measure_charge(&c, &q);
-      sum_charge += sign*c;
-      sum_c2 += sign*c*c;
-      sum_q += sign*q;
-      sum_q2 += sign*q*q; 
-
-      gettimeofday(&end,NULL);
-      measuretime += 1e6*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec;
-
-      if(i%n_average==0){
-        printf("\n%d, %d updates in %.3g seconds\n", i*n_measure, n_average*n_measure, 1e-6*updatetime);
-        printf("%d, %d measurements in %.3g seconds\n", i*n_measure, n_average, 1e-6*measuretime);
-
-        #if defined(WANGLANDAU) || #defined(LLR)
-        printf("%d, acceptance %.3g, sector change rate %.3g \n", i*n_measure, (double)llr_accepted/n_average, (double)sector_changes/n_average);
-        llr_accepted = 0; sector_changes = 0;
-        #endif
-
-        //measure_propagator( 1 ); //This includes an invertion and therefore takes time
+      //measure_propagator( 1 ); //This includes an invertion and therefore takes time
         
-        updatetime = 0; measuretime = 0;
+      updatetime = 0; measuretime = 0;
 
-        printf("MONOMERS %g \n", ((double)sum_monomers)/n_average);
-        printf("LINKS %g \n", (double)sum_links/n_average);
-        printf("CHARGE %g %g \n", (double)sum_charge/n_average, (double)sum_c2/n_average);
-        printf("QCHI %g %g \n", (double)sum_q/n_average, (double)sum_q2/n_average);
-        //printf("Susc %g \n", (double)sum_susc/n_average);
-        //if( m == 0 )
-        //  printf("SUSCEPTIBILITY %g \n", (double)sum_susc_wb/n_average);
-        printf("SIGN %g\n", (double)sum_sign/n_average);
+      printf("MONOMERS %g \n", ((double)sum_monomers)/n_average);
+      printf("LINKS %g \n", (double)sum_links/n_average);
+      printf("CHARGE %g %g \n", (double)sum_charge/n_average, (double)sum_c2/n_average);
+      printf("QCHI %g %g \n", (double)sum_q/n_average, (double)sum_q2/n_average);
+      //printf("Susc %g \n", (double)sum_susc/n_average);
+      //if( m == 0 )
+      //  printf("SUSCEPTIBILITY %g \n", (double)sum_susc_wb/n_average);
+      printf("SIGN %g\n", (double)sum_sign/n_average);
 
-        #ifdef LLR
-        double llr_a_ave = sum_llr_a/n_average*llr_update_every;
-        printf("LLR a_%d = %g, exp(a) = %g\n", llr_target, llr_a_ave, exp(llr_a_ave));
-        sum_llr_a = 0;
-        #elif WANGLANDAU
-        for(int s=0; s<=WL_max_sector; s++){
-          printf("WANGLANDAU SECTOR %d %g \n", s, WangLaundau_F[s]);
-        }
-        WangLaundau_write_energy();
-        #elif MEASURE_SECTOR
-        #else
-        for(int s=0; s<MAX_SECTOR; s++){
-          printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
-          sectors[s] = 0;
-        }
-        #endif
-
-        fflush(stdout);
-
-        sum_monomers = 0; sum_links = 0; sum_charge = 0;
-        sum_c2 = 0; sum_q = 0; sum_q2 = 0; sum_susc = 0;
-        sum_susc_wb = 0; sum_sign = 0;
+      #ifdef LLR
+      double llr_a_ave = sum_llr_a/n_average*llr_update_every;
+      printf("LLR a_%d = %g, exp(a) = %g\n", llr_target, llr_a_ave, exp(llr_a_ave));
+      sum_llr_a = 0;
+      #elif WANGLANDAU
+      for(int s=0; s<=WL_max_sector; s++){
+        printf("WANGLANDAU SECTOR %d %g \n", s, WangLaundau_F[s]);
       }
-      
-      gettimeofday(&start,NULL);
+      WangLaundau_write_energy();
+      #elif MEASURE_SECTOR
+      #else
+      for(int s=0; s<MAX_SECTOR; s++){
+        printf("SECTOR %d %g \n", s, (double)sectors[s]/n_average);
+        sectors[s] = 0;
+      }
+      #endif
+
+      fflush(stdout);
+
+      sum_monomers = 0; sum_links = 0; sum_charge = 0;
+      sum_c2 = 0; sum_q = 0; sum_q2 = 0; sum_susc = 0;
+      sum_susc_wb = 0; sum_sign = 0;
     }
+      
+    gettimeofday(&start,NULL);
+  }
 
   printf(" ** simulation done\n");
 
