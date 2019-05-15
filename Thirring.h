@@ -50,6 +50,10 @@
 
 #define MAX_SECTOR 301
 
+/* Thermalise without accept/reject */
+void thermalise( int nsteps );
+
+
 /* Functions in vec_ops.c */
 void vec_zero( double **a );
 void vec_one(double **a);

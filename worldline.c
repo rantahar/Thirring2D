@@ -19,6 +19,8 @@ double m;
 double U;
 double mu;
 
+char configuration_filename[100];
+
 /* LLR parameters */
 int llr_target;
 double llr_gaussian_weight = 5; // Used in thermalisation even with wall
@@ -48,11 +50,67 @@ double *psi,*chi;
  */
 int *tup,*xup,*tdn,*xdn;
 
+
 /* Utility, print error and exit */
 void errormessage( char * message ){
   fprintf( stderr, message );
   exit(1);
 }
+
+
+/* Saves the current configuration in a file */
+void write_configuration(char * filename){
+  FILE * config_file;
+
+  int * buffer = malloc(2*NX*NT*sizeof(int));
+  for (int t=0; t<NT; t++){
+    for (int x=0; x<NX; x++){
+      buffer[t*NX+x] = field[t][x];
+      buffer[NX*NT+t*NX+x] = diraclink[t][x];
+    }
+  }
+  
+  config_file = fopen(filename,"wb");
+  if (config_file){
+    fwrite(buffer, 2*VOLUME, sizeof(int), config_file);
+    fclose(config_file);
+  } else {
+    printf("Could not write configuration\n");
+    exit(1);
+  }
+  free(buffer);
+}
+
+void read_configuration(char * filename){
+  FILE * config_file;
+  
+  config_file = fopen(filename,"rb");
+  int * buffer = malloc(2*NX*NT*sizeof(int));
+  if (config_file){
+    fread(buffer, 2*VOLUME, sizeof(int), config_file);
+    fclose(config_file);
+  } else {
+    /* Create a cold configuration */
+    printf("No configuration file, starting from a COLD state\n");
+    for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
+      field[t][x] = 0;
+      diraclink[t][x] = 0;
+    }
+
+    // Thermalise
+    printf("Thermalising\n");
+    thermalise(NX);
+  }
+  for (int t=0; t<NT; t++){
+    for (int x=0; x<NX; x++) {
+      field[t][x] = buffer[t*NX+x];
+      diraclink[t][x] = buffer[NT*NX+t*NX+x];
+    }
+  }
+  free(buffer);
+}
+
+
 
 /* Functions for fetching neighboring coordinates */
 static inline int tdir(int t, int dir){
@@ -157,6 +215,8 @@ static inline int is_legal(int t, int x, int nu){
   t2 = tdir(t,nu); x2 = xdir(x,nu);
   return ( field[t][x] == 0 && field[t2][x2] == 0 );
 }
+
+
 
 
 
@@ -413,8 +473,8 @@ void init_sector_weights( double Weights[MAX_SECTOR], int max_init_steps ){
   for( int i=0; i<max_init_steps; i++){
     update(1);
     Weights[current_sector] += 1;
-    if( Weights[current_sector] > 10000 ){
-      // Effective stepsize is reduced to 0.0001
+    if( Weights[current_sector] > 1000 ){
+      // Effective stepsize is reduced to 0.001
       break;
     }
   }
@@ -1347,11 +1407,14 @@ int main(int argc, char* argv[])
 
   get_long("Random seed", &seed);
 
+  get_char(" Configuration filename ", configuration_filename);
+
+
 #ifdef WANGLANDAU
   get_double("Wang Landau step size", &llr_alpha);
   get_int("Wang Landau steps with dampened decay", &llr_constant_steps);
   get_int("Last sector to measure", &WL_max_sector);
-  get_char(" Initial values file : ", init_parameter_filename);
+  get_char(" Initial values file ", init_parameter_filename);
 #elif LLR
   get_double("LLR step size", &llr_alpha);
   get_int("LLR steps with dampened decay", &llr_constant_steps);
@@ -1377,6 +1440,7 @@ int main(int argc, char* argv[])
   printf(" mu %f \n", mu);
   printf(" Size of fluctuation matrix %d\n", max_changes );
   printf(" Random seed %ld\n", seed );
+  printf(" Configuration file %s\n", configuration_filename );
 #ifdef WANGLANDAU
   printf(" Wang Landau step size %g\n", llr_alpha );
   printf(" Wang Landau %d first steps with dampened decay\n", llr_constant_steps );
@@ -1436,11 +1500,8 @@ int main(int argc, char* argv[])
 #endif
   }
 
-  /* fill monomers and links */
-  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
-    field[t][x] = 0;
-    diraclink[t][x] = 1 + 2*x%2;
-  }
+
+  read_configuration(configuration_filename);
 
   int ** field_copy = malloc( NT*sizeof(int *) );
   for (int t=0; t<NT; t++) field_copy[t] = malloc( (NX+1)*sizeof(int) );
@@ -1496,9 +1557,6 @@ int main(int argc, char* argv[])
   WangLaundau_setup( n_average*n_measure );
 
 #endif
-
-  // Thermalise
-  thermalise(n_average*n_measure);
 
   struct timeval start, end;
   double updatetime=0, measuretime = 0;
