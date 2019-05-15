@@ -431,8 +431,13 @@ void init_free_energy( int max_init_steps ){
   /* Run a couple of Newton steps */
   for( int i=0; i<2; i++ ){
     init_sector_weights( Weights, max_init_steps );
+    double average, sum = 0;
     for( int s=0; s<MAX_SECTOR; s++){
-      double logw = log(Weights[s]/Weights[0]);
+      sum += Weights[s];
+    }
+    average = sum/MAX_SECTOR;
+    for( int s=0; s<MAX_SECTOR; s++){
+      double logw = log(Weights[s]/average);
       logw = fmax( logw, -10);
       WangLaundau_F[s] += logw;
     }
@@ -468,6 +473,14 @@ void WangLaundau_setup( int max_init_steps ){
 void WangLaundau_write_energy(){
   FILE * config_file;
 
+  double f0 = 0;
+  for( int i=0; i<MAX_SECTOR; i++){
+    f0 += WangLaundau_F[i];
+  }
+  for( int i=0; i<MAX_SECTOR; i++){
+    WangLaundau_F[i] -= f0/MAX_SECTOR;
+  }
+
   config_file = fopen(init_parameter_filename,"wb");
   if (config_file){
     for( int s=0; s<MAX_SECTOR; s++){
@@ -487,11 +500,7 @@ void WangLaundau_update(sector){
     WangLaundau_F[sector] += step;
     WangLaundau_iteration[sector]++;
   }
-  double f0 = WangLaundau_F[0];
-  for( int i=0; i<=WL_max_sector; i++){
-    WangLaundau_F[i] -= f0;
   }
-}
 
 
 
@@ -507,7 +516,7 @@ int llr_accept(){
   int sector;
   double weight;
   sector = count_negative_loops();
-  if( sector > WL_max_sector+1 ){
+  if( sector >= WL_max_sector ){
     return 0;
   }
   if( sector != current_sector ){

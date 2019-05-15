@@ -11,8 +11,8 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 256
-#define NX 256
+#define NT 128
+#define NX 128
 
 #define ND 2
 #define NDIRS (2*ND)
@@ -48,7 +48,7 @@
 #define WITH_MASS_MONOMERS
 #define PROPAGATOR_MATRIX
 
-#define MAX_SECTOR 201
+#define MAX_SECTOR 301
 
 /* Functions in vec_ops.c */
 void vec_zero( double **a );
