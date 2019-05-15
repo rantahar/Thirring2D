@@ -1661,6 +1661,8 @@ int main(int argc, char* argv[])
 
       fflush(stdout);
 
+      write_configuration(configuration_filename);
+
       sum_monomers = 0; sum_links = 0; sum_charge = 0;
       sum_c2 = 0; sum_q = 0; sum_q2 = 0; sum_susc = 0;
       sum_susc_wb = 0; sum_sign = 0;
