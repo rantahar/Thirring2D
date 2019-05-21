@@ -106,7 +106,7 @@ def plot_window_fit( nruns, center, width ):
 
 def plot_smoothing( nruns, width, max ):
   wl_f = read_data( nruns )
-  wl_f = wl_f[:,:max]
+  wl_f = wl_f[:,1:max]
 
   mean = np.mean(wl_f, axis=0)
   sigma = np.std(wl_f, axis=0)/np.sqrt((wl_f.shape[0]-1))
@@ -114,7 +114,7 @@ def plot_smoothing( nruns, width, max ):
   plot.errorbar( x, mean, sigma, fmt='o' , capsize=4 )
 
   wl_f_fit = []
-  x = np.linspace(0, sigma.shape[0]-1, sigma.shape[0])
+  x = np.linspace(1, sigma.shape[0]-1, sigma.shape[0])
   for point in x:
     value = window_smooth(point, wl_f, width).mean(axis=0)
     wl_f_fit.append(value)
@@ -126,14 +126,18 @@ def plot_smoothing( nruns, width, max ):
 
 def average_sign( nruns, width, max ):
   wl_f = read_data( nruns )
-  wl_f = wl_f[:,:max]
+  wl_f = wl_f[:,1:max]
 
   weights = []
-  for x in range(max):
+  for x in range(1,max):
     free_energy = window_smooth( x, wl_f, width )
     weight = np.exp(free_energy) * ( 1 - x%2*2 )
     weights.append(weight)
   weights = np.array(weights).transpose()
+
+  # Treat weight at 0 separately
+  w0 = np.exp([wl_f[:,0]]).transpose()
+  weights = np.concatenate((w0,weights),axis=1)
 
   sign = np.sum(weights, axis=1)
   mean = np.mean(sign)
