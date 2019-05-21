@@ -28,7 +28,7 @@ def calc_sign( nruns=nruns, weights=False ):
   wl_w = numpy.exp(wl_f)
   wl_w = numpy.multiply( 1/numpy.sum(wl_w,1,keepdims=True), wl_w )
 
-  sign = numpy.array( [ -(i%2-0.5)*2 for i in range(101) ] )
+  sign = numpy.array( [ -(i%2-0.5)*2 for i in range(wl_w.shape[1]) ] )
   wl_w_s = wl_w*sign
 
   sign_all = wl_w_s.sum(1)
