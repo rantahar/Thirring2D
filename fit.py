@@ -106,16 +106,21 @@ def plot_window_fit( nruns, center, width ):
 
 def plot_smoothing( nruns, width, max ):
   wl_f = read_data( nruns )
-  wl_f = wl_f[:,1:max]
+  wl_f = wl_f[:,0:max]
 
   mean = np.mean(wl_f, axis=0)
   sigma = np.std(wl_f, axis=0)/np.sqrt((wl_f.shape[0]-1))
   x = np.linspace(0, sigma.shape[0]-1, sigma.shape[0])
   plot.errorbar( x, mean, sigma, fmt='o' , capsize=4 )
 
+  window = mean > -14
+  window[0] = False
+  wl_f = wl_f[:,window]
+  x = x[window]
+
   wl_f_fit = []
-  x = np.linspace(1, sigma.shape[0]-1, sigma.shape[0])
-  for point in x:
+  x = np.linspace(x.min(), x.max(), x.shape[0])
+  for point in range(x.shape[0]):
     value = window_smooth(point, wl_f, width).mean(axis=0)
     wl_f_fit.append(value)
 
@@ -131,18 +136,28 @@ def average_sign( nruns, width, max ):
   # Treat weight at 0 separately
   w0 = np.exp([wl_f[:,0]]).transpose()
   wl_f = wl_f[:,1:]
+  print(0,w0.mean())
+
+  mean = wl_f.mean(axis=0)
+  x = np.linspace(0, mean.shape[0]-1, mean.shape[0])
+  window = mean > -14
+  window[0] = False
+  wl_f = wl_f[:,window]
+  x = x[window]
 
   # sector > 0
   weights = []
-  for x in range(max-1):
-    sector = x+1
-    free_energy = window_smooth( x, wl_f, width )
+  for i in range(x.shape[0]):
+    sector = x[i]
+    free_energy = window_smooth( i, wl_f, width )
     weight = np.exp(free_energy) * ( 1 - sector%2*2 )
     weights.append(weight)
   weights = np.array(weights).transpose()
 
   weights = np.concatenate((w0,weights),axis=1)
 
+  weightsum = np.abs(weights).sum(axis=1)
+  weights =  (weights.transpose()/weightsum).transpose()
   sign = np.sum(weights, axis=1)
   mean = np.mean(sign)
   sigma = np.std(sign)/(np.sqrt(sign.shape[0]-1))
