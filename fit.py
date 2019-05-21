@@ -126,17 +126,21 @@ def plot_smoothing( nruns, width, max ):
 
 def average_sign( nruns, width, max ):
   wl_f = read_data( nruns )
-  wl_f = wl_f[:,1:max]
-
-  weights = []
-  for x in range(1,max):
-    free_energy = window_smooth( x, wl_f, width )
-    weight = np.exp(free_energy) * ( 1 - x%2*2 )
-    weights.append(weight)
-  weights = np.array(weights).transpose()
+  wl_f = wl_f[:,:max]
 
   # Treat weight at 0 separately
   w0 = np.exp([wl_f[:,0]]).transpose()
+  wl_f = wl_f[:,1:]
+
+  # sector > 0
+  weights = []
+  for x in range(max-1):
+    sector = x+1
+    free_energy = window_smooth( x, wl_f, width )
+    weight = np.exp(free_energy) * ( 1 - sector%2*2 )
+    weights.append(weight)
+  weights = np.array(weights).transpose()
+
   weights = np.concatenate((w0,weights),axis=1)
 
   sign = np.sum(weights, axis=1)
