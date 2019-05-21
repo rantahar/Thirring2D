@@ -498,7 +498,7 @@ void init_free_energy( int max_init_steps ){
     average = sum/MAX_SECTOR;
     for( int s=0; s<MAX_SECTOR; s++){
       double logw = log(Weights[s]/average);
-      logw = fmax( logw, -10);
+      logw = fmax( logw, -2);
       WangLaundau_F[s] += logw;
     }
   }
@@ -507,6 +507,8 @@ void init_free_energy( int max_init_steps ){
   }
 }
 
+
+double active_sector_free_energy;
 
 void WangLaundau_setup( int max_init_steps ){
   FILE *config_file;
@@ -531,16 +533,20 @@ void WangLaundau_setup( int max_init_steps ){
     }
     init_free_energy( max_init_steps );
   }
+
+  for( int i=0; i<MAX_SECTOR; i++) if(WL_measure_sector[i]) {
+    active_sector_free_energy += WangLaundau_F[i];
+  }
 }
 
 void WangLaundau_write_energy(){
   FILE * config_file;
 
-  double f0 = 0;
-  for( int i=0; i<MAX_SECTOR; i++){
+  double f0 = -active_sector_free_energy;
+  for( int i=0; i<MAX_SECTOR; i++) if(WL_measure_sector[i]) {
     f0 += WangLaundau_F[i];
   }
-  for( int i=0; i<MAX_SECTOR; i++){
+  for( int i=0; i<MAX_SECTOR; i++) if(WL_measure_sector[i]) {
     WangLaundau_F[i] -= f0/MAX_SECTOR;
   }
 
