@@ -46,6 +46,7 @@ def new_parameter_file( run ):
 {U}
 {mu}
 {seed}
+.config_{run}
 {step}
 {init_nstep}
 {last}

@@ -5,6 +5,6 @@ It includes
 
 * A fermion bag algorithm
 * A world line fermion bag method
-* An HMC simulation of the gauged representation for comparison
+* An heathbath simulation of the gauged representation for comparison
 * A dimer representation of the large coupling limit
 
