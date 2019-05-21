@@ -8,22 +8,21 @@ from time import sleep
 
 from calc_sign import calc_sign
 
-nruns = 100
-nnodes = 40
+nruns = 20
+nnodes = 3
 
-nupdates = 100000
-nmeasure = 10
-U = 0.3
+nupdates = 1000
+nmeasure = 1
+U = 0
 m = 0.1
-mu = 0.6
-X = 32
-T = 32
+mu= 0
 step = 10
 init_nstep = 1000
 
 tolerance = 0.01
 sector_tolerance = 0.001*tolerance
-max_iterations = 100
+min_accuracy = sector_tolerance
+max_iterations = 1000
 
 seed = random.randint(0,99999999)
 
@@ -32,8 +31,6 @@ if len(sys.argv) == 2 and sys.argv[1] in ["local", "-l"]:
   use_srun = False
 else :
   use_srun = True
-
-last = 100
 
 
 def new_parameter_file( run ):
@@ -49,7 +46,6 @@ def new_parameter_file( run ):
 .config_{run}
 {step}
 {init_nstep}
-{last}
 WL_F_{run}'''
   
   text_file = open(f".parameter_{run}", "w")
@@ -81,14 +77,29 @@ for i in range(max_iterations):
   for p in processes:
     p.wait()
   
-  sign_mean, sign_std, weights = calc_sign(nruns, True)
-  sector_done = weights[:,1]/abs(sign_mean) < sector_tolerance
+  sign_mean, sign_std, weights = calc_sign(nruns, weights=True)
+  sector_done = (weights[:,0]+weights[:,1])/abs(sign_mean) < sector_tolerance
+  sector_done = numpy.logical_and( sector_done, (weights[:,0]+weights[:,1]) < min_accuracy )
+  sector_done = numpy.append(sector_done, [True,True])
   
-  for f, done in enumerate(sector_done):
-    if not done:
-      last = f
-  
-  print(sign_mean,sign_std, last)
+  for run in range(nruns):
+    sector = 0
+    text = ''
+    weight_file = open(f"WL_F_{run}", "r")
+    for line in weight_file:
+      values = line.split()
+      if len(values) == 3:
+        if sector_done[sector]:
+          text += f"{values[0]} {values[1]} 0\n"
+        else:
+          text += f"{values[0]} {values[1]} 1\n"
+        sector += 1
+    weight_file.close()
+    weight_file = open(f"WL_F_{run}", "w")
+    weight_file.write(text)
+    weight_file.close()
+      
+  print(sign_mean,sign_std)
   sys.stdout.flush()
   
   error = sign_std/abs(sign_mean)

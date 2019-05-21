@@ -27,7 +27,6 @@ double llr_gaussian_weight = 5; // Used in thermalisation even with wall
 double llr_a = 0;             // The measurable a in the llr method
 int llr_constant_steps = 100; // Number of (roughly) constant steps at start
 double llr_alpha = 0.1;       // Step size
-int WL_max_sector;       // Maximum sector to sample
 
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
@@ -461,6 +460,7 @@ int find_link_pointing_at( int t, int x ){
 #ifdef WANGLANDAU
 double WangLaundau_F[MAX_SECTOR];
 long WangLaundau_iteration[MAX_SECTOR];
+int WL_measure_sector[MAX_SECTOR];
 char init_parameter_filename[100];
 int current_sector = 0;
 int llr_accepted=0;
@@ -516,7 +516,7 @@ void WangLaundau_setup( int max_init_steps ){
   if(config_file) {
     printf(" Reading initial free energy\n" );
     for( int s=0; s<MAX_SECTOR; s++){
-      fscanf(config_file, "%lf %ld\n", &WangLaundau_F[s], &WangLaundau_iteration[s]);
+      fscanf(config_file, "%lf %ld %d\n", &WangLaundau_F[s], &WangLaundau_iteration[s], &WL_measure_sector[s]);
       if( WangLaundau_iteration[s] > 0 ){
         initialized = 1;
       }
@@ -527,6 +527,7 @@ void WangLaundau_setup( int max_init_steps ){
   if( initialized == 0 ) {
     for( int s=0; s<MAX_SECTOR; s++){
       WangLaundau_iteration[s] = 0;
+      WL_measure_sector[s] = 1;
     }
     init_free_energy( max_init_steps );
   }
@@ -546,7 +547,7 @@ void WangLaundau_write_energy(){
   config_file = fopen(init_parameter_filename,"wb");
   if (config_file){
     for( int s=0; s<MAX_SECTOR; s++){
-      fprintf(config_file, "%g %d\n", WangLaundau_F[s], WangLaundau_iteration[s]);
+      fprintf(config_file, "%g %d %d\n", WangLaundau_F[s], WangLaundau_iteration[s], WL_measure_sector[s]);
     }
     fclose(config_file);
   } else {
@@ -557,7 +558,7 @@ void WangLaundau_write_energy(){
 
 // Update the free energy in the Wang-Landau algorithm
 void WangLaundau_update(sector){
-  if( sector <= WL_max_sector ){
+  if( WL_measure_sector[sector] ){
     double step = llr_alpha/(WangLaundau_iteration[sector]+llr_constant_steps);
     WangLaundau_F[sector] += step;
     WangLaundau_iteration[sector]++;
@@ -578,7 +579,7 @@ int llr_accept(){
   int sector;
   double weight;
   sector = count_negative_loops();
-  if( sector >= WL_max_sector ){
+  if( WL_measure_sector[sector] == 0 ){
     return 0;
   }
   if( sector != current_sector ){
@@ -1413,7 +1414,6 @@ int main(int argc, char* argv[])
 #ifdef WANGLANDAU
   get_double("Wang Landau step size", &llr_alpha);
   get_int("Wang Landau steps with dampened decay", &llr_constant_steps);
-  get_int("Last sector to measure", &WL_max_sector);
   get_char(" Initial values file ", init_parameter_filename);
 #elif LLR
   get_double("LLR step size", &llr_alpha);
@@ -1647,7 +1647,7 @@ int main(int argc, char* argv[])
       printf("LLR a_%d = %g, exp(a) = %g\n", llr_target, llr_a_ave, exp(llr_a_ave));
       sum_llr_a = 0;
       #elif WANGLANDAU
-      for(int s=0; s<=WL_max_sector; s++){
+      for(int s=0; s<=MAX_SECTOR; s++) if(WL_measure_sector[s]) {
         printf("WANGLANDAU SECTOR %d %g \n", s, WangLaundau_F[s]);
       }
       WangLaundau_write_energy();
