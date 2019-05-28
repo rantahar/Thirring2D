@@ -27,19 +27,20 @@ def fit_window( wl_f, center, width ):
   sigma = np.std(wl_f, axis=0)/np.sqrt((wl_f.shape[0]-1))
   x = np.linspace(0, sigma.shape[0]-1, sigma.shape[0])
 
-  window = np.logical_and(x > center-width-1, x < center+width+1)
+  window = np.logical_and(x > center-width-50, x < center+width+50)
   window = np.logical_and(window, x >= 0)
 
   x = x[window]-center
   wl_f = wl_f[ :, window ]
-  sigma = sigma[ window ] * ( 1+np.abs(x)*2/width )
+  # Using a gaussian weight
+  d = np.minimum( np.abs(x)/width, 10 ) 
+  w = np.exp(d**2/2)
+  sigma = sigma[ window ] * w
 
   par = []
   for m in range(wl_f.shape[0]):
     parameters, conv = curve_fit(fit_function, x, wl_f[m], [0,0,0], sigma=sigma)
     par.append(parameters)
-    diff  = (fit_function(x,*par[m]) - wl_f[m])/sigma
-    chisq = (diff*diff).sum()
   return par
 
 
@@ -136,28 +137,33 @@ def average_sign( nruns, width, max ):
   # Treat weight at 0 separately
   w0 = np.exp([wl_f[:,0]]).transpose()
   wl_f = wl_f[:,1:]
-  print(0,w0.mean())
 
   mean = wl_f.mean(axis=0)
-  x = np.linspace(0, mean.shape[0]-1, mean.shape[0])
+  sigma = np.std(wl_f, axis=0)/np.sqrt((wl_f.shape[0]-1))
+  x = np.linspace(1, mean.shape[0], mean.shape[0])
   window = mean > -14
   window[0] = False
+  mean = mean[window]
+  sigma = sigma[window]
   wl_f = wl_f[:,window]
   x = x[window]
 
   # sector > 0
   weights = []
+  free_energies = []
   for i in range(x.shape[0]):
     sector = x[i]
     free_energy = window_smooth( i, wl_f, width )
     weight = np.exp(free_energy) * ( 1 - sector%2*2 )
     weights.append(weight)
+    free_energies.append(free_energy)
   weights = np.array(weights).transpose()
-
   weights = np.concatenate((w0,weights),axis=1)
+  
+  diffs = np.abs(np.array(free_energies).mean(axis=1) - mean)/sigma
+  print("mean diff:", diffs.mean())
+  print("max diff:", diffs.max())
 
-  weightsum = np.abs(weights).sum(axis=1)
-  weights =  (weights.transpose()/weightsum).transpose()
   sign = np.sum(weights, axis=1)
   mean = np.mean(sign)
   sigma = np.std(sign)/(np.sqrt(sign.shape[0]-1))
@@ -168,7 +174,7 @@ def average_sign( nruns, width, max ):
 if __name__ == "__main__":
   if len(sys.argv) > 3 :
     nruns = int(sys.argv[1])
-    width = int(sys.argv[2])
+    width = float(sys.argv[2])
     max_sector = int(sys.argv[3])
     if len(sys.argv) > 4:
       do_plot = (sys.argv[4] == 'plot')
