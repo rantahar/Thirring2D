@@ -543,11 +543,13 @@ void WangLaundau_write_energy(){
   FILE * config_file;
 
   double f0 = -active_sector_free_energy;
+  int n_active = 0;
   for( int i=0; i<MAX_SECTOR; i++) if(WL_measure_sector[i]) {
     f0 += WangLaundau_F[i];
+    n_active += 1;
   }
   for( int i=0; i<MAX_SECTOR; i++) if(WL_measure_sector[i]) {
-    WangLaundau_F[i] -= f0/MAX_SECTOR;
+    WangLaundau_F[i] -= f0/n_active;
   }
 
   config_file = fopen(init_parameter_filename,"wb");
