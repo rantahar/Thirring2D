@@ -587,9 +587,6 @@ int llr_accept(){
   int sector;
   double weight;
   sector = count_negative_loops();
-  if( WL_measure_sector[sector] == 0 ){
-    return 0;
-  }
   if( sector != current_sector ){
     weight = WangLaundau_weight(sector,current_sector);
     if( mersenne() < weight ){
