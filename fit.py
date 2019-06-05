@@ -141,7 +141,7 @@ def plot_smoothing( nruns, width, max ):
   plot.show()
 
 
-def average_sign( nruns, width, max ):
+def average_sign( nruns, width, max, print_weights = False ):
   wl_f = read_data( nruns )
   wl_f = wl_f[:,:max]
 
