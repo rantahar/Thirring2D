@@ -13,8 +13,8 @@ default: Thirring Thirring_exp
 fermionbag: fermionbag.o mersenne_inline.o vec_ops.o fermion_matrix.o full_determinant.o fluctuation_determinant.o $(DEPS)
 	$(CC) $(CFLAGS) -o fermionbag fermionbag.o mersenne_inline.o vec_ops.o fermion_matrix.o full_determinant.o fluctuation_determinant.o -llapack $(LIB)
 
-worldline: worldline.o mersenne_inline.o measurements.o vec_ops.o fermion_matrix.o full_determinant.o fluctuation_determinant.o $(DEPS)
-	$(CC) $(CFLAGS) -o worldline worldline.o mersenne_inline.o measurements.o vec_ops.o fermion_matrix.o fluctuation_determinant.o -llapack $(LIB)
+worldline: worldline.o mersenne_inline.o measurements.o $(DEPS)
+	$(CC) $(CFLAGS) -o worldline worldline.o mersenne_inline.o $(LIB)
 
 gauged: gauged.o mersenne_inline.o $(DEPS)
 	$(CC) $(CFLAGS) -o gauged gauged.o mersenne_inline.o -llapack $(LIB)
