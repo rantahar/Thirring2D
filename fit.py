@@ -93,8 +93,8 @@ def read_data( nruns ):
 
 def window_smooth( x, wl_f, width, eval = 0 ):
   if width > 0: 
-  par = fit_window(wl_f, x, width)
-  return evaluate_fit(0, par)
+    par = fit_window(wl_f, x, width)
+    return evaluate_fit(0, par)
   else:
     return wl_f[:,x]
 
@@ -146,8 +146,8 @@ def average_sign( nruns, width, max, print_weights = False ):
   wl_f = wl_f[:,:max]
 
   # Treat weight at 0 separately
-  w0 = np.exp([wl_f[:,0]]).transpose()
-  wl_f = wl_f[:,1:]
+  #w0 = np.exp([wl_f[:,0]]).transpose()
+  #wl_f = wl_f[:,1:]
 
   mean = wl_f.mean(axis=0)
   sigma = np.std(wl_f, axis=0)/np.sqrt((wl_f.shape[0]-1))
@@ -168,7 +168,7 @@ def average_sign( nruns, width, max, print_weights = False ):
     weights.append(weight)
     free_energies.append(free_energy)
   weights = np.array(weights).transpose()
-  weights = np.concatenate((w0,weights),axis=1)
+  #weights = np.concatenate((w0,weights),axis=1)
   
   diffs = np.abs(np.array(free_energies).mean(axis=1) - mean)/sigma
   print("mean diff:", diffs.mean())
