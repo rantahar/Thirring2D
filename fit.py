@@ -168,6 +168,8 @@ def average_sign( nruns, width, max ):
   sign = np.sum(weights, axis=1)
   mean = np.mean(sign)
   sigma = np.std(sign)/(np.sqrt(sign.shape[0]-1))
+  if print_weights :
+    print(weights.mean(axis=0))
   return [mean, sigma]
   
 
@@ -179,15 +181,17 @@ if __name__ == "__main__":
     max_sector = int(sys.argv[3])
     if len(sys.argv) > 4:
       do_plot = (sys.argv[4] == 'plot')
+      print_weights = (sys.argv[4] == 'weights')
     else :
       do_plot = False
+      print_weights = False
   else:
     print("usage: fit.py Nruns window_width max_sector ")
 
   if do_plot:
     plot_smoothing(nruns, width, max_sector)
   else:
-    mean, sigma = average_sign(nruns, width, max_sector)
+    mean, sigma = average_sign(nruns, width, max_sector, print_weights)
     print(mean, sigma)
 
   
