@@ -163,14 +163,12 @@ def average_sign( nruns, width, max, print_weights = False ):
   free_energies = []
   for i in range(x.shape[0]):
     free_energy = window_smooth( i, wl_f, width )
-    weight = np.exp(free_energy)
-    weights.append(weight)
     free_energies.append(free_energy)
   diffs = np.abs(np.array(free_energies).mean(axis=1) - mean)/sigma
   print("mean diff:", diffs.mean())
   print("max diff:", diffs.max())
 
-  weights = np.array(weights).transpose()
+  weights = np.exp(np.array(free_energies).transpose())
   sign = -(x%2-0.5)*2
   weights = weights*sign
   #weights = np.concatenate((w0,weights),axis=1)
