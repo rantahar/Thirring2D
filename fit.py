@@ -92,8 +92,11 @@ def read_data( nruns ):
 
 
 def window_smooth( x, wl_f, width, eval = 0 ):
+  if width > 0: 
   par = fit_window(wl_f, x, width)
   return evaluate_fit(0, par)
+  else:
+    return wl_f[:,x]
 
 
 def plot_window_fit( nruns, center, width ):
