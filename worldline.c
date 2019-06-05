@@ -86,6 +86,7 @@ void read_configuration(char * filename){
   config_file = fopen(filename,"rb");
   int * buffer = malloc(2*NX*NT*sizeof(int));
   if (config_file){
+    printf("Reading configuration\n");
     fread(buffer, 2*VOLUME, sizeof(int), config_file);
     fclose(config_file);
   } else {
@@ -537,6 +538,8 @@ void WangLaundau_setup( int max_init_steps ){
   for( int i=0; i<MAX_SECTOR; i++) if(WL_measure_sector[i]) {
     active_sector_free_energy += WangLaundau_F[i];
   }
+
+  current_sector = count_negative_loops();
 }
 
 void WangLaundau_write_energy(){
