@@ -7,6 +7,8 @@ from scipy.optimize import curve_fit
 import time
 
 
+min_weight = -16
+
 def fit_function( x, p1, p2, p3 ):
   return p1 + x*p2 + x*x*p3
 
@@ -114,14 +116,14 @@ def plot_smoothing( nruns, width, max ):
   x = np.linspace(0, sigma.shape[0]-1, sigma.shape[0])
   plot.errorbar( x, mean, sigma, fmt='o' , capsize=4 )
 
-  window = mean > -14
-  window[0] = False
+  window = mean > min_weight
   wl_f = wl_f[:,window]
   x = x[window]
 
   wl_f_fit = []
-  x = np.linspace(x.min(), x.max(), x.shape[0])
-  for point in range(x.shape[0]):
+  x = np.linspace(x.min(), x.max(), x.shape[0]*10)
+  for i in range(x.shape[0]):
+    point = x[i]
     value = window_smooth(point, wl_f, width).mean(axis=0)
     wl_f_fit.append(value)
 
@@ -140,9 +142,8 @@ def average_sign( nruns, width, max ):
 
   mean = wl_f.mean(axis=0)
   sigma = np.std(wl_f, axis=0)/np.sqrt((wl_f.shape[0]-1))
-  x = np.linspace(1, mean.shape[0], mean.shape[0])
-  window = mean > -14
-  window[0] = False
+  x = np.linspace(0, mean.shape[0]-1, mean.shape[0])
+  window = mean > min_weight
   mean = mean[window]
   sigma = sigma[window]
   wl_f = wl_f[:,window]
