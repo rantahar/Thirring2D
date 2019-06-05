@@ -26,7 +26,7 @@ def calc_sign( nruns=nruns, weights=False ):
 
   wl_f = numpy.array(wl_f).astype(numpy.float)
   wl_w = numpy.exp(wl_f)
-  wl_w = numpy.multiply( 1/numpy.sum(wl_w,1,keepdims=True), wl_w )
+  wl_w = ( wl_w.transpose()/wl_w.sum(1) ).transpose()
 
   sign = numpy.array( [ -(i%2-0.5)*2 for i in range(wl_w.shape[1]) ] )
   wl_w_s = wl_w*sign
