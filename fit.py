@@ -145,10 +145,6 @@ def average_sign( nruns, width, max, print_weights = False ):
   wl_f = read_data( nruns )
   wl_f = wl_f[:,:max]
 
-  # Treat weight at 0 separately
-  #w0 = np.exp([wl_f[:,0]]).transpose()
-  #wl_f = wl_f[:,1:]
-
   mean = wl_f.mean(axis=0)
   sigma = np.std(wl_f, axis=0)/np.sqrt((wl_f.shape[0]-1))
   x = np.linspace(0, mean.shape[0]-1, mean.shape[0])
@@ -171,7 +167,6 @@ def average_sign( nruns, width, max, print_weights = False ):
   weights = np.exp(np.array(free_energies).transpose())
   sign = -(x%2-0.5)*2
   weights = weights*sign
-  #weights = np.concatenate((w0,weights),axis=1)
   
   sign = np.sum(weights, axis=1)
   mean = np.mean(sign)
