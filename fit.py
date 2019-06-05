@@ -129,8 +129,14 @@ def plot_smoothing( nruns, width, max ):
     point = x[i]
     value = window_smooth(point, wl_f, width).mean(axis=0)
     wl_f_fit.append(value)
+  wl_f_fit = np.array(wl_f_fit)
 
-  plot.plot( x,  np.array(wl_f_fit))
+  plot.plot( x, wl_f_fit)
+
+  plot.xlabel('Negative loops')
+  plot.ylabel('F')
+  plot.ylim(int(1.1*min_weight), int(0.5*wl_f_fit.max()))
+  plot.xlim(-1, int(1.1*x.max()))
 
   plot.show()
 
