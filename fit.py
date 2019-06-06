@@ -8,9 +8,11 @@ import time
 
 
 min_weight = -14
+polynomial_degree = 2
 
-def fit_function( x, p1, p2, p3 ):
-  return p1 + x*p2 + x*x*p3
+def fit_function( x, *p ):
+  r = np.polyval(p, x)
+  return r
 
 
 def plot_window(wl_f, center, width):
@@ -41,7 +43,7 @@ def fit_window( wl_f, center, width ):
 
   par = []
   for m in range(wl_f.shape[0]):
-    parameters, conv = curve_fit(fit_function, x, wl_f[m], [0,0,0], sigma=sigma)
+    parameters, conv = curve_fit(fit_function, x, wl_f[m], [0]*(polynomial_degree+1), sigma=sigma)
     par.append(parameters)
   return par
 
