@@ -7,6 +7,13 @@ DEPS=Makefile Thirring.h mersenne.h
 
 default: Thirring Thirring_exp
 
+tests/test_worldline: mersenne_inline.o tests/test_worldline.c worldline.c
+	$(CC) $(CFLAGS) -DTESTING tests/test_worldline.c worldline.c mersenne_inline.o -o tests/test_worldline -lcmocka -lm
+
+.PHONY: tests
+tests: tests/test_worldline
+	tests/test_worldline
+
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
@@ -39,6 +46,7 @@ worldline_sector.o: worldline.c $(DEPS)
 
 worldline_sector: worldline_sector.o mersenne_inline.o  $(DEPS)
 	$(CC) $(CFLAGS) -DMEASURE_SECTOR -o worldline_sector worldline_sector.o mersenne_inline.o $(LIB)
+
 
 
 clean:
