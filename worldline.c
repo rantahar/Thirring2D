@@ -1383,6 +1383,74 @@ void get_char( char * name, char * dest ){
 } 
 
 
+
+void setup_lattice(int seed){
+  /* "Warm up" the rng generator */
+  seed_mersenne( seed );
+  for (int i=0; i<543210; i++) mersenne();
+
+  /* Allocate location and field arrays */
+  field = malloc( NT*sizeof(int *) );
+  diraclink = malloc( NT*sizeof(int *) );
+  eta = malloc( NT*sizeof(int *) );
+  for (int t=0; t<NT; t++){
+    field[t] = malloc( (NX+1)*sizeof(int) );
+    diraclink[t] = malloc( (NX+1)*sizeof(int) );
+    eta[t] = malloc( (NX+1)*sizeof(int *) );
+    for (int x=0; x<NX+1; x++) {
+     eta[t][x] = malloc( 2*sizeof(int) );
+    }
+  }
+  xup = malloc( (NX+1)*sizeof(int) );
+  xdn = malloc( (NX+1)*sizeof(int) );
+  tup = malloc( NT*sizeof(int) );
+  tdn = malloc( NT*sizeof(int) );
+
+  /* fill up the index array */
+  for(int i=0; i<NT; i++) {
+    tup[i] = (i+1) % NT;
+    tdn[i] = (i-1+NT) % NT;
+  }
+  for(int i=0; i<NX+1; i++) {
+    xup[i] = (i+1) % NX;
+    xdn[i] = (i-1+NX) % NX;
+  }
+#ifdef OPENX  //Never match boundaries to actual sites
+  xdn[0] = NX;
+  xup[NX-1] = NX;
+  xup[NX] = NX;
+#endif
+
+  /* fill the staggered eta array */
+  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
+    eta[t][x][1] = 1;
+    if( x%2 == 0 ){
+      eta[t][x][0] = 1;
+    } else {
+      eta[t][x][0] = -1;
+    }
+#ifdef OPENX  
+    eta[t][NX][0] = eta[t][NX][1] = 0;
+#endif
+  }
+
+  int ** field_copy = malloc( NT*sizeof(int *) );
+  for (int t=0; t<NT; t++) field_copy[t] = malloc( (NX+1)*sizeof(int) );
+
+  #ifdef OPENX
+  for (int t=0; t<NT; t++) {
+    field[t][NX] = EMPTY; //Site doesn't exist, no links or monomers, but not free either
+    field_copy[t][NX] = EMPTY;
+    diraclink[t][NX] = EMPTY;
+  }
+  #endif
+}
+
+
+// The main function is ignored when running tests
+#ifndef TESTING 
+
+
 /* Main function
  */
 int main(int argc, char* argv[])
@@ -1422,12 +1490,6 @@ int main(int argc, char* argv[])
   get_int("Target sector", &llr_target);
 #endif
 
-
-
-  /* "Warm up" the rng generator */
-  seed_mersenne( seed );
-  for (i=0; i<543210; i++) mersenne();
-
   printf(" \n++++++++++++++++++++++++++++++++++++++++++\n");
   //printf(" Git commit ID GIT_COMMIT_ID  \n");
   printf(" 2D Thirring model, ( %d , %d ) lattice\n", NT, NX );
@@ -1450,66 +1512,11 @@ int main(int argc, char* argv[])
 #elif MEASURE_SECTOR
   printf(" Measuring expectation values in sector %d\n", llr_target );
 #endif
-  /* Allocate location and field arrays */
-  field = malloc( NT*sizeof(int *) );
-  diraclink = malloc( NT*sizeof(int *) );
-  eta = malloc( NT*sizeof(int *) );
-  for (int t=0; t<NT; t++){
-    field[t] = malloc( (NX+1)*sizeof(int) );
-    diraclink[t] = malloc( (NX+1)*sizeof(int) );
-    eta[t] = malloc( (NX+1)*sizeof(int *) );
-    for (int x=0; x<NX+1; x++) {
-     eta[t][x] = malloc( 2*sizeof(int) );
-    }
-  }
-  xup = malloc( (NX+1)*sizeof(int) );
-  xdn = malloc( (NX+1)*sizeof(int) );
-  tup = malloc( NT*sizeof(int) );
-  tdn = malloc( NT*sizeof(int) );
 
-
-
-  /* fill up the index array */
-  for (i=0; i<NT; i++) {
-    tup[i] = (i+1) % NT;
-    tdn[i] = (i-1+NT) % NT;
-  }
-  for (i=0; i<NX+1; i++) {
-    xup[i] = (i+1) % NX;
-    xdn[i] = (i-1+NX) % NX;
-  }
-#ifdef OPENX  //Never match boundaries to actual sites
-  xdn[0] = NX;
-  xup[NX-1] = NX;
-  xup[NX] = NX;
-#endif
-
-  /* fill the staggered eta array */
-  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
-    eta[t][x][1] = 1;
-    if( x%2 == 0 ){
-      eta[t][x][0] = 1;
-    } else {
-      eta[t][x][0] = -1;
-    }
-#ifdef OPENX  
-    eta[t][NX][0] = eta[t][NX][1] = 0;
-#endif
-  }
-
-
-  read_configuration(configuration_filename);
-
-  int ** field_copy = malloc( NT*sizeof(int *) );
-  for (int t=0; t<NT; t++) field_copy[t] = malloc( (NX+1)*sizeof(int) );
   
-#ifdef OPENX
-  for (int t=0; t<NT; t++) {
-    field[t][NX] = EMPTY; //Site doesn't exist, no links or monomers, but not free either
-    field_copy[t][NX] = EMPTY;
-    diraclink[t][NX] = EMPTY;
-  }
-#endif
+  // Set up lattice variables and fields
+  setup_lattice(seed);
+  read_configuration(configuration_filename);
   
   /* and the update/measure loop */
   int sum_monomers = 0;
@@ -1675,7 +1682,7 @@ int main(int argc, char* argv[])
 
 
 
-
+#endif // NOT TESTING
 
 
 
