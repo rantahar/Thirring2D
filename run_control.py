@@ -67,7 +67,7 @@ for i in range(max_iterations):
         else:
           p = subprocess.Popen(["./worldline_WL"], stdin=inputfile, stdout=outputfile)
         processes.append(p)
-    while len(processes) == nnodes:
+    while len(processes) >= nnodes:
       sleep(0.5)
       for p in processes:
         if p.poll() is not None:
