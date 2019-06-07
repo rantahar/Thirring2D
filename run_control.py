@@ -60,7 +60,6 @@ for i in range(max_iterations):
 
   processes = []
   for run in range(nruns):
-    new_parameter_file( run )
     with open(f".parameter_{run}", "r") as inputfile:
       with open(f"output_{run}", "a+") as outputfile:
         if(use_srun):
