@@ -98,8 +98,7 @@ for i in range(max_iterations):
     weight_file.write(text)
     weight_file.close()
       
-  print(sign_mean,sign_std)
-  sys.stdout.flush()
+  print("Sign:", sign_mean, sign_std)
   
   error = sign_std/abs(sign_mean)
   if( error < tolerance ):
