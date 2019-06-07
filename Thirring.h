@@ -84,3 +84,7 @@ void measure_susceptibility();
 
 
 
+/* Worldline functions */
+void setup_lattice(int seed);
+int configuration_sign();
+int count_negative_loops();

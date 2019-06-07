@@ -423,13 +423,19 @@ int count_negative_loops(){
     if( loop_sign < 0 ){
       sector += 1;
     }
-
   }
   
   return sector;
 }
 
-
+int configuration_sign(){
+  int sign = 1;
+  for(int t=0; t<NT; t++) for(int x=0;x<NX;x++) if(field[t][x]==0){
+    int dir = diraclink[t][x];
+    sign *= linksign(t,x,dir);
+  }
+  return sign;
+}
 
 
 /* Find a link pointing at a given site */
