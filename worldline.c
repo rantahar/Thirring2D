@@ -209,17 +209,6 @@ static inline void monomers_off(int t, int x, int dir){
 }
 
 
-/* Check if it's legal to add a link or monomer */
-static inline int is_legal(int t, int x, int nu){
-  int t2,x2;
-  t2 = tdir(t,nu); x2 = xdir(x,nu);
-  return ( field[t][x] == 0 && field[t2][x2] == 0 );
-}
-
-
-
-
-
 
 
 /* Try to add or remove a link at a given site */
