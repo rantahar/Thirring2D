@@ -52,7 +52,7 @@ int *tup,*xup,*tdn,*xdn;
 
 /* Utility, print error and exit */
 void errormessage( char * message ){
-  fprintf( stderr, message );
+  fprintf( stderr, "%s", message );
   exit(1);
 }
 
@@ -694,7 +694,7 @@ int negative_loops(){
 #endif
 
 /* The propability of removing a link */
-double remove_link_weight(t, x){
+double remove_link_weight(int t, int x){
   double weight;
   int dir = diraclink[t][x];
   weight = 2;    //There is always a factor 0.5 for each link
@@ -704,7 +704,7 @@ double remove_link_weight(t, x){
 }
 
 /* The propability of adding a link */
-double add_link_weight(t, x, dir){
+double add_link_weight(int t, int x, int dir){
   double weight;
   weight = 0.5;    //There is always a factor 0.5 for each link
   if( dir == TUP ) weight *= exp(mu);
