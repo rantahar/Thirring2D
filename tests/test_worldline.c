@@ -60,7 +60,6 @@ void negative_time_loop(){
     diraclink[2][0]= TUP;
     diraclink[2][1]= TDN;
     diraclink[1][1]= TUP;
-    print_config();
 }
 
 /* A test that checks if 1 is true */
