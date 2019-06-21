@@ -4,14 +4,15 @@
 #include "mersenne.h"
 #include <time.h>
 #include <sys/time.h>
+#include "lapacke.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846264338327 
 #endif
 
 /* Lattice size and dimensions */
-#define NT 128
-#define NX 128
+#define NT 8
+#define NX 8
 
 #define ND 2
 #define NDIRS (2*ND)
@@ -27,6 +28,7 @@
 //#define SYMMETRIC   //implemented in Thirring_hop
 //#define OPENX       //open in space, (anti)symmetric in time
 
+#define SECTOR_STEP 0.01
 
 /* Enumerate possible values for a field */
 #define MONOMER 1
@@ -43,11 +45,37 @@
 /* Propability of exiting in the monomer moving worm update */
 #define flip_exit_propability 0.2
 
-#define FLUCTUATION_MATRIX
+//#define FLUCTUATION_MATRIX
 #define WITH_MASS_MONOMERS
-#define PROPAGATOR_MATRIX
+//#define PROPAGATOR_MATRIX
 
 #define MAX_SECTOR 301
+
+#ifndef MAIN
+#define EXTERN extern
+#else
+#define EXTERN
+#endif
+
+
+/* Neighbour index arrays, to be filled at the beginning
+ */
+EXTERN int *tup,*xup,*tdn,*xdn;
+
+/* storage */
+EXTERN int    ***eta;   //Staggered eta matrix
+EXTERN double m;
+EXTERN double U;
+EXTERN double mu;
+
+/* Monomers and links
+ * field stores both, 0 for empty, 1 for monomer and 2+dir for links
+ */
+EXTERN int n_monomers;
+EXTERN int n_links;
+EXTERN int **field;
+
+
 
 /* Thermalise without accept/reject */
 void thermalise( int nsteps );
@@ -67,7 +95,7 @@ void fM( double **chi, double **psi );
 void fM_transpose(double **chi, double **psi );
 
 /* In fermion_matrix.c */
-double fM_index( int t1, int x1, int t2, int x2 );
+double fM_index( int t1, int x1, int t2, int x2, double mu );
 void calc_Dinv( );
 
 
@@ -79,12 +107,31 @@ double * alloc_field();
 
 
 /* In measurements.c */
-void measure_propagator( int sign );
 void measure_susceptibility();
 
 
 
 /* Worldline functions */
-void setup_lattice(int seed);
+void setup_lattice(long seed);
 int configuration_sign();
 int count_negative_loops();
+
+
+/* Utilities */
+/* Functions for fetching neighboring coordinates */
+static inline int tdir(int t, int dir){
+  if( dir == TUP ) return tup[t];
+  if( dir == TDN ) return tdn[t];
+  return(t);
+}
+
+static inline int xdir(int x, int dir){
+  if( dir == XUP ) return xup[x];
+  if( dir == XDN ) return xdn[x];
+  return(x);
+}
+
+/* Opposite of a direction */
+static inline int opp_dir(int dir){
+  return ( dir + ND ) % NDIRS;
+}

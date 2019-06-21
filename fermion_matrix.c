@@ -25,7 +25,7 @@ int *tup,*xup,*tdn,*xdn;
 /* The fermion matrix
  */
 #ifdef ANTISYMMETRIC //Antisymmetrix boundaries
-double fM_index( int t1, int x1, int t2, int x2 )
+double fM_index( int t1, int x1, int t2, int x2, double mu )
 {
   if(t1==t2 ){ 
 #ifndef WITH_MASS_MONOMERS
@@ -65,7 +65,7 @@ double fM_index( int t1, int x1, int t2, int x2 )
 #endif
 
 #ifdef SYMMETRIC //Symmetrix boundaries
-double fM_index( int t1, int x1, int t2, int x2 )
+double fM_index( int t1, int x1, int t2, int x2, double mu )
 {
   if(t1==t2 ){
 #ifndef WITH_MASS_MONOMERS
@@ -111,7 +111,7 @@ double fM_index( int t1, int x1, int t2, int x2 )
 
 
 #ifdef FULLSYMMETRIC //Symmetrix boundaries
-double fM_index( int t1, int x1, int t2, int x2 )
+double fM_index( int t1, int x1, int t2, int x2, double mu )
 {
   if(t1==t2 ){ 
 #ifndef WITH_MASS_MONOMERS
@@ -149,7 +149,7 @@ double fM_index( int t1, int x1, int t2, int x2 )
 #endif
 
 #ifdef OPENX //Open in space, antisymmetric in time
-double fM_index( int t1, int x1, int t2, int x2 )
+double fM_index( int t1, int x1, int t2, int x2, double mu )
 {
  if( x1!=NX && x2!=NX ) {
   if(t1==t2 ){ 
@@ -186,6 +186,7 @@ double fM_index( int t1, int x1, int t2, int x2 )
 
 /* Calculate the propagator matrix
  */
+#ifdef PROPAGATOR_MATRIX
 #ifdef WITH_MASS_MONOMERS
 void calc_Dinv( )
 {
@@ -392,7 +393,7 @@ void calc_Dinv( )
       int i1 = (NX*t1 + x1);
       for (int t2=0; t2<NT; t2++) for (int x2=0; x2<NX; x2++) {
         int i2 = (NX*t2 + x2);
-        M[i1*n + i2] = fM_index( t1, x1, t2, x2 );
+        M[i1*n + i2] = fM_index( t1, x1, t2, x2, mu );
       }
     }
 
@@ -427,6 +428,7 @@ void calc_Dinv( )
   free(ipiv);
 }
 
+#endif
 #endif
 
 

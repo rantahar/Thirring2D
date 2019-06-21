@@ -1390,7 +1390,7 @@ void get_char( char * name, char * dest ){
 
 
 
-void setup_lattice(int seed){
+void setup_lattice(long seed){
   /* "Warm up" the rng generator */
   seed_mersenne( seed );
   for (int i=0; i<543210; i++) mersenne();
