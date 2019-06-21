@@ -113,7 +113,7 @@ static inline int is_legal(int t, int x, int nu){
 
 
 /* Invert the matrix of propagators between occupied sites
- * Assing the current configuration as the background
+ * Assign the current configuration as the background
  */
 extern int current_sign;
 double accepted_det = 1;
@@ -158,7 +158,7 @@ void not_moved_source_monomer(int t2, int x2, int t4, int x4){
 
 //NOTE: Does not work with EVENODD
 /* Determinants after adding or removing links */
-double determinant( ){
+double determinant_mu( double mu ){
   int *ipiv;
   int info;
   double *M;
@@ -175,7 +175,7 @@ double determinant( ){
   //printf(" \n ");
   for (int t1=0; t1<NT; t1++) for (int x1=0; x1<NX; x1++) if(field[t1][x1]==0) {
     for (int t2=0; t2<NT; t2++) for (int x2=0; x2<NX; x2++) if(field[t2][x2]==0) {
-      M[i] = fM_index( t1, x1, t2, x2 );
+      M[i] = fM_index( t1, x1, t2, x2, mu );
       //printf(" %.4f ",M[i]);
       i++;
     }
@@ -201,6 +201,15 @@ double determinant( ){
 
   return( det );
 }
+
+double determinant(){
+  return determinant_mu( mu );
+}
+
+double determinant_mu0(){
+  return determinant_mu( 0 );
+}
+
 
 
 

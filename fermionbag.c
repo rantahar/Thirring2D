@@ -58,6 +58,8 @@ void not_moved_source_monomer(int t2, int x2, int t4, int x4);
 #ifdef FLUCTUATION_MATRIX
 void update_background( );
 #endif
+double determinant();
+double determinant_mu( double mu);
 
 
 /* Functions for fetching neighboring coordinates */
@@ -819,9 +821,6 @@ int main(int argc, char* argv[])
 
     /* Update */
     changes += update();
-#ifdef DEBUG
-    check_det(  );
-#endif
     
     if((i%n_measure)==0){
 
@@ -836,9 +835,8 @@ int main(int argc, char* argv[])
       /* Statistics */
       printf("MONOMERS %d \n", current_sign*n_monomers);
       printf("LINKS %d \n", current_sign*n_links);
-      printf("Determinant %g \n", accepted_det);
+      printf("Determinant base %g \n", accepted_det);
       #ifdef DEBUG
-      //printf("Determinant %g \n", current_sign*current_det);
       print_config();
       #endif DEBUG
       printf("Sign %d \n", current_sign);
@@ -850,6 +848,19 @@ int main(int argc, char* argv[])
 
       if(i>n_thermalize) {
         /* Do measurements */
+        double tdet = determinant_mu(0), tdet2;
+        printf("Determinant at mu=0 %g \n", tdet);
+        printf("Determinant ratio %g \n", accepted_det/tdet);
+        int sector = 0;
+        for(double tmu=0;tmu<=mu;tmu+=SECTOR_STEP){
+          tdet2 = determinant_mu(tmu);
+          if( tdet*tdet2 < 0 ){
+            sector++;
+          }
+          tdet = tdet2;
+        }
+        printf("Sector %d\n",sector);
+
         measure();
 
         /* Time measurements */
