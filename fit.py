@@ -121,13 +121,18 @@ def plot_smoothing( nruns, width, max ):
   x = np.linspace(0, sigma.shape[0]-1, sigma.shape[0])
   plot.errorbar( x, mean, sigma, fmt='o' , capsize=4 )
 
-  window = mean > min_weight
-  print(window.sum(), "sectors above minimal weight")
-  wl_f = wl_f[:,window]
-  x = x[window]
+  max_i = 0
+  for i in range(x.shape[0]):
+    if mean[i] > min_weight:
+      max_i = i+1
+      
+  print("Max sector used", max_i)
+  wl_f = wl_f[:,:max_i]
+  x = x[:max_i]
 
   wl_f_fit = []
-  intermediate_points = int(100/x.shape[0])
+  intermediate_points = int(100/x.shape[0]+1)
+  print(intermediate_points)
   x = np.linspace(x.min(), x.max(), x.shape[0]*intermediate_points)
   for i in range(x.shape[0]):
     point = x[i]-x.min()
@@ -135,7 +140,7 @@ def plot_smoothing( nruns, width, max ):
     wl_f_fit.append(value)
   wl_f_fit = np.array(wl_f_fit)
 
-  plot.plot( x, wl_f_fit)
+  plot.plot( x, wl_f_fit )
 
   plot.xlabel('Negative loops')
   plot.ylabel('F')
@@ -160,7 +165,6 @@ def average_sign( nruns, width, max, print_weights = False ):
   wl_f = wl_f[:,window]
   x = x[window]
 
-  # sector > 0
   weights = []
   free_energies = []
   for i in range(x.shape[0]):
