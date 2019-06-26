@@ -111,25 +111,6 @@ void read_configuration(char * filename){
 }
 
 
-
-/* Functions for fetching neighboring coordinates */
-static inline int tdir(int t, int dir){
-  if( dir == TUP ) return tup[t];
-  else if ( dir == TDN ) return tdn[t];
-  else return(t);
-}
-
-static inline int xdir(int x, int dir){
-  if( dir == XUP ) return xup[x];
-  else if ( dir == XDN ) return xdn[x];
-  else return(x);
-}
-
-/* Opposite of a direction */
-static inline int opp_dir(int dir){
-  return ( dir + ND ) % NDIRS;
-}
-
 /* Make a copy of the fields */
 int old_field[NT][NX];
 int old_diraclink[NT][NX];
