@@ -433,6 +433,10 @@ char init_parameter_filename[100];
 int current_sector = 0;
 int llr_accepted=0;
 int sector_changes=0;
+int range_lower=-1, range_higher=1e6;
+long WL_nstep=1;
+int last_range_update=1;
+#define SAD
 
 void init_sector_weights( double Weights[MAX_SECTOR], int max_init_steps ){
   for( int i=0; i<MAX_SECTOR; i++){
@@ -491,6 +495,7 @@ void WangLaundau_setup( int max_init_steps ){
         initialized = 1;
       }
     }
+    fscanf(config_file, "%d %d %ld %d\n", &range_lower, &range_higher, &WL_nstep, &last_range_update);
     fclose(config_file);
   }
 
@@ -527,6 +532,7 @@ void WangLaundau_write_energy(){
     for( int s=0; s<MAX_SECTOR; s++){
       fprintf(config_file, "%g %d %d\n", WangLaundau_F[s], WangLaundau_iteration[s], WL_measure_sector[s]);
     }
+    fprintf(config_file, "%d %d %d %d\n", range_lower, range_higher, WL_nstep, last_range_update);
     fclose(config_file);
   } else {
     printf("Could not write configuration\n");
@@ -536,19 +542,78 @@ void WangLaundau_write_energy(){
 
 // Update the free energy in the Wang-Landau algorithm
 void WangLaundau_update(sector){
+#ifdef SAD
+  double Tmin = 1;
+  double Ns, max_sector, max_histogram = 0;
+  double range;
+  double step;
+  double tolerance = -20;
+  double maximum = -10000;
+
+  if( WL_nstep==1 ){ // first call
+    range_lower = sector;
+    range_higher = sector;
+    step = 1;
+    WangLaundau_F[sector] += step;
+    WangLaundau_iteration[sector]++;
+    WL_nstep++;
+    return;
+  }
+
+  for( int s=0; s<MAX_SECTOR; s++){
+    if( WangLaundau_iteration[s] > max_histogram ){
+      max_histogram = WangLaundau_iteration[s];
+      max_sector = s;
+    }
+  }
+  
+  if( max_sector > range_higher ){
+    range_higher = max_sector;
+    last_range_update = WL_nstep;
+  }
+
+  if( max_sector < range_lower ){
+    range_lower = max_sector;
+    last_range_update = WL_nstep;
+  }
+
+  WangLaundau_iteration[sector]++;
+  printf("SAD %d %d %d\n", range_lower, range_higher, WL_nstep);
+  
+  if( sector <= range_higher && sector >= range_lower ){
+    double Ns = range_higher - range_lower +1;
+    double t0 = Ns/Tmin;
+    double st2 = (double) WL_nstep * (double) WL_nstep;
+    double l = last_range_update;
+    double e = t0 + WL_nstep/l;
+    double d = t0 +  st2/(Ns*l);
+    step = llr_alpha*e/d;
+    WangLaundau_F[sector] += step;
+    if( step <= 0 ){
+      printf("Negative step in SAD %g %g %g\n",step, e, d);
+      exit(1);
+    }
+
+    for( int s=0; s<MAX_SECTOR; s++)
+      if( WangLaundau_F[s] > maximum )
+        maximum = WangLaundau_F[s];
+    for( int s=0; s<MAX_SECTOR; s++)
+      if( WangLaundau_F[s] < maximum+tolerance )
+        WangLaundau_F[s] = maximum+tolerance;
+  }
+  WL_nstep++;
+
+#else
   if( WL_measure_sector[sector] ){
     double step = llr_alpha/(WangLaundau_iteration[sector]+llr_constant_steps);
     WangLaundau_F[sector] += step;
     WangLaundau_iteration[sector]++;
   }
+#endif
 }
 
-
-
 double WangLaundau_weight(new_sector,old_sector){
-  double weight;
-  weight = exp(-WangLaundau_F[new_sector]+WangLaundau_F[old_sector]);
-  return weight;
+  return exp(WangLaundau_F[old_sector]-WangLaundau_F[new_sector]);
 }
 
 
