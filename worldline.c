@@ -31,8 +31,6 @@ double llr_alpha = 0.1;       // Step size
 /* Monomers and links
  * field stores both, 0 for empty, 1 for monomer and 2+dir for links
  */
-int n_monomers=0;
-int n_links=0;
 int **field;
 
 /* Fermion worldline links */
@@ -211,7 +209,6 @@ int update_link_at(int s, int dir2)
         /* Replace with 2 opposing arrows */
         diraclink[t][x] = dir;
         diraclink[t2][x2] = opp_dir(dir);
-        n_links--;
         success = 1;
       }
     }
@@ -230,7 +227,6 @@ int update_link_at(int s, int dir2)
           link_on(t,x,dir);
           diraclink[t][x] = NDIRS;
           diraclink[t2][x2] = NDIRS;
-          n_links++;
           success = 1;
         }
       }
@@ -263,8 +259,6 @@ int update_monomers_at(int s, int dir)
         /* Replace with 2 opposing arrows */
         diraclink[t][x] = dir;
         diraclink[t2][x2] = opp_dir(dir);
-        n_monomers-=2;
-        success = 1;
       }
     }
   } else if( field[t][x] == 0 ) {
@@ -281,8 +275,6 @@ int update_monomers_at(int s, int dir)
           monomers_on(t,x,dir);
           diraclink[t][x] = NDIRS;
           diraclink[t2][x2] = NDIRS;
-          n_monomers+=2;
-          success = 1;
         }
       }
     }
@@ -315,7 +307,6 @@ int add_link_at(int t, int x)
         link_on(t,x,dir);
         diraclink[t][x] = NDIRS;
         diraclink[t2][x2] = NDIRS;
-        n_links++;
         success = 1;
       }
     }
@@ -340,7 +331,6 @@ int remove_link_at(int t, int x)
       /* Replace with 2 opposing arrows */
       diraclink[t][x] = dir;
       diraclink[t2][x2] = opp_dir(dir);
-      n_links--;
       success = 1;
     }
   }
@@ -710,7 +700,6 @@ void dirac_worm_add_monomer( int *t, int *x ){
         diraclink[*t][*x] = NDIRS;
         diraclink[t2][x2] = 10;
         *t=t2; *x=x2;
-        n_monomers += 1;
       }
     }
   } else if( field[t2][x2] == MONOMER ){
@@ -720,7 +709,6 @@ void dirac_worm_add_monomer( int *t, int *x ){
       diraclink[*t][*x] = dir;
       diraclink[t2][x2] = 10;
       *t=t2; *x=x2;
-      n_monomers -= 1;
     }
   }
 }
@@ -757,7 +745,6 @@ int update_dirac_background(){
       if( mersenne() < p ){
         field[t][x] = 0;
         diraclink[t][x] = 10;
-        n_monomers -= 1;
         t0 = t; x0 = x;
         started = 1;
       }
@@ -794,7 +781,6 @@ int update_dirac_background(){
             if( mersenne() < p ){
               field[t][x] = MONOMER;
               diraclink[t][x] = NDIRS;
-              n_monomers += 1;
               break;
             }
           }
@@ -1265,6 +1251,12 @@ double measure_susceptibility_with_background( ){
   #ifdef OPENX
   int nsteps = 0;
   int n_attempts = 1;
+  int n_links = 0;
+  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) {
+    if(field[t][x] >= LINK_TUP){
+      n_links +=1;
+    }
+  }
   double scale_factor = n_links/(2.*VOLUME*n_attempts);
   
   for(int i=0; i<n_attempts;i++){
@@ -1598,6 +1590,18 @@ int main(int argc, char* argv[])
     if( m == 0 )
       sum_susc_wb += sign*measure_susceptibility_with_background();
     #endif
+
+    int n_monomers = 0, n_links = 0;
+    for (int t=0; t<NT; t++){
+      for (int x=0; x<NX; x++) {
+        if(field[t][x] == MONOMER){
+          n_monomers +=1;
+        }
+        if(field[t][x] >= LINK_TUP){
+          n_links +=1;
+        }
+      }
+    }
 
     sum_monomers += sign*n_monomers;
     sum_links += sign*n_links;
