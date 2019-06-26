@@ -1643,9 +1643,9 @@ int main(int argc, char* argv[])
       printf("LLR a_%d = %g, exp(a) = %g\n", llr_target, llr_a_ave, exp(llr_a_ave));
       sum_llr_a = 0;
       #elif WANGLANDAU
-      for(int s=0; s<=MAX_SECTOR; s++) if(WL_measure_sector[s]) {
-        printf("WANGLANDAU SECTOR %d %g \n", s, WangLaundau_F[s]);
-      }
+      //for(int s=0; s<=MAX_SECTOR; s++) if(WL_measure_sector[s]) {
+      //  printf("WANGLANDAU SECTOR %d %g \n", s, WangLaundau_F[s]);
+      //}
       WangLaundau_write_energy();
       #elif MEASURE_SECTOR
       #else
