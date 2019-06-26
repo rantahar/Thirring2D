@@ -89,6 +89,13 @@ void read_configuration(char * filename){
     printf("Reading configuration\n");
     fread(buffer, 2*VOLUME, sizeof(int), config_file);
     fclose(config_file);
+
+    for (int t=0; t<NT; t++){
+      for (int x=0; x<NX; x++) {
+        field[t][x] = buffer[t*NX+x];
+        diraclink[t][x] = buffer[NT*NX+t*NX+x];
+      }
+    }
   } else {
     /* Create a cold configuration */
     printf("No configuration file, starting from a COLD state\n");
@@ -100,12 +107,6 @@ void read_configuration(char * filename){
     // Thermalise
     printf("Thermalising\n");
     thermalise(NX);
-  }
-  for (int t=0; t<NT; t++){
-    for (int x=0; x<NX; x++) {
-      field[t][x] = buffer[t*NX+x];
-      diraclink[t][x] = buffer[NT*NX+t*NX+x];
-    }
   }
   free(buffer);
 }
