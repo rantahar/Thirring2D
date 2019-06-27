@@ -495,20 +495,16 @@ void WangLaundau_setup( int max_init_steps ){
         initialized = 1;
       }
     }
-    fscanf(config_file, "%d %d %ld %d\n", &range_lower, &range_higher, &WL_nstep, &last_range_update);
+    fscanf(config_file, "%ld %d\n", &WL_nstep, &last_range_update);
     fclose(config_file);
   }
 
   if( initialized == 0 ) {
     for( int s=0; s<MAX_SECTOR; s++){
       WangLaundau_iteration[s] = 0;
-      WL_measure_sector[s] = 1;
+      WL_measure_sector[s] = 0;
     }
-    init_free_energy( max_init_steps );
-  }
-
-  for( int i=0; i<MAX_SECTOR; i++) if(WL_measure_sector[i]) {
-    active_sector_free_energy += WangLaundau_F[i];
+    //init_free_energy( max_init_steps );
   }
 
   current_sector = count_negative_loops();
@@ -517,22 +513,12 @@ void WangLaundau_setup( int max_init_steps ){
 void WangLaundau_write_energy(){
   FILE * config_file;
 
-  double f0 = -active_sector_free_energy;
-  int n_active = 0;
-  for( int i=0; i<MAX_SECTOR; i++) if(WL_measure_sector[i]) {
-    f0 += WangLaundau_F[i];
-    n_active += 1;
-  }
-  for( int i=0; i<MAX_SECTOR; i++) if(WL_measure_sector[i]) {
-    WangLaundau_F[i] -= f0/n_active;
-  }
-
   config_file = fopen(init_parameter_filename,"wb");
   if (config_file){
     for( int s=0; s<MAX_SECTOR; s++){
-      fprintf(config_file, "%g %d %d\n", WangLaundau_F[s], WangLaundau_iteration[s], WL_measure_sector[s]);
+      fprintf(config_file, "%g %ld %d\n", WangLaundau_F[s], WangLaundau_iteration[s], WL_measure_sector[s]);
     }
-    fprintf(config_file, "%d %d %d %d\n", range_lower, range_higher, WL_nstep, last_range_update);
+    fprintf(config_file, "%d %d\n", WL_nstep, last_range_update);
     fclose(config_file);
   } else {
     printf("Could not write configuration\n");
@@ -543,17 +529,16 @@ void WangLaundau_write_energy(){
 // Update the free energy in the Wang-Landau algorithm
 void WangLaundau_update(sector){
 #ifdef SAD
-  double Tmin = 1;
-  double Ns, max_sector, max_histogram = 0;
-  double range;
+  int max_sector, max_histogram = 0;
+  double Tmin = 100;
+  double Ns;
   double step;
-  double tolerance = -20;
+  double tolerance = -40;
   double maximum = -10000;
 
   if( WL_nstep==1 ){ // first call
-    range_lower = sector;
-    range_higher = sector;
     step = 1;
+    WL_measure_sector[sector] = 1;
     WangLaundau_F[sector] += step;
     WangLaundau_iteration[sector]++;
     WL_nstep++;
@@ -567,27 +552,26 @@ void WangLaundau_update(sector){
     }
   }
   
-  if( max_sector > range_higher ){
-    range_higher = max_sector;
+  if( !WL_measure_sector[max_sector] ){
+    WL_measure_sector[max_sector] = 1;
     last_range_update = WL_nstep;
-  }
-
-  if( max_sector < range_lower ){
-    range_lower = max_sector;
-    last_range_update = WL_nstep;
+    printf("New sector %d %d\n", max_sector, WL_nstep);
   }
 
   WangLaundau_iteration[sector]++;
-  printf("SAD %d %d %d\n", range_lower, range_higher, WL_nstep);
   
-  if( sector <= range_higher && sector >= range_lower ){
-    double Ns = range_higher - range_lower +1;
+  if( WL_measure_sector[sector] ){
+    double Ns = 1;
+    for( int s=0; s<MAX_SECTOR; s++ ){
+      Ns += WL_measure_sector[sector];
+    }
     double t0 = Ns/Tmin;
     double st2 = (double) WL_nstep * (double) WL_nstep;
     double l = last_range_update;
     double e = t0 + WL_nstep/l;
-    double d = t0 +  st2/(Ns*l);
+    double d = t0 + st2/(Ns*l);
     step = llr_alpha*e/d;
+    //printf("SAD %g %d %d %g %g\n", step, last_range_update, WL_nstep, e, d);
     WangLaundau_F[sector] += step;
     if( step <= 0 ){
       printf("Negative step in SAD %g %g %g\n",step, e, d);
@@ -597,9 +581,12 @@ void WangLaundau_update(sector){
     for( int s=0; s<MAX_SECTOR; s++)
       if( WangLaundau_F[s] > maximum )
         maximum = WangLaundau_F[s];
-    for( int s=0; s<MAX_SECTOR; s++)
-      if( WangLaundau_F[s] < maximum+tolerance )
-        WangLaundau_F[s] = maximum+tolerance;
+    for( int s=0; s<MAX_SECTOR; s++){
+      WangLaundau_F[s] -= maximum;
+      if( WangLaundau_F[s] < tolerance ){
+        WangLaundau_F[s] = tolerance;
+      }
+    }
   }
   WL_nstep++;
 
