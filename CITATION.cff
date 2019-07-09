@@ -5,12 +5,12 @@ message: "Please cite the following works when using this software."
 title: Monte Carlo Algorithms for simulating the 1+1 dimensional staggered lattice Thirring Model
 version: 1.0
 date-released: 4 Sep 2018
+doi: 10.5281/zenodo.1408845
 authors:
   - family-names: Rantaharju
     given-names: Jarno
     orcid:  https://orcid.org/0000-0002-0072-7707
-    
-doi: 10.5281/zenodo.1408845
+
 
 references:
   - type: article
