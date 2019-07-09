@@ -8,6 +8,10 @@ DEPS=Makefile Thirring.h mersenne.h
 default: Thirring Thirring_exp
 
 
+partitioned: partitioned.o mersenne_inline.o fermion_matrix.o $(DEPS)
+	$(CC) $(CFLAGS) -o partitioned partitioned.o mersenne_inline.o fermion_matrix.o -llapack $(LIB)
+
+
 .PHONY: tests
 tests: tests/test_worldline
 	tests/test_worldline
