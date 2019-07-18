@@ -207,11 +207,9 @@ void calc_Dinv( )
   char filename[100];
 #ifdef ANTISYMMETRIC
   sprintf(filename, "free_propagator_eo_T%dX%d_mu%0.6f",NT,NX,mu);
-#endif
-#ifdef SYMMETRIC
+#elif SYMMETRIC
   sprintf(filename, "free_propagator_eo_T%dX%d_mu%0.6f_sym",NT,NX,mu);
-#endif
-#ifdef OPENX
+#elif OPENX
   sprintf(filename, "free_propagator_eo_T%dX%d_mu%0.6f_open",NT,NX,mu);
 #endif
   
