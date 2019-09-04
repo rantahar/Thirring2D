@@ -62,23 +62,6 @@ double determinant();
 double determinant_mu( double mu);
 
 
-/* Functions for fetching neighboring coordinates */
-static inline int tdir(int t, int dir){
-  if( dir == TUP ) return tup[t];
-  if( dir == TDN ) return tdn[t];
-  return(t);
-}
-
-static inline int xdir(int x, int dir){
-  if( dir == XUP ) return xup[x];
-  if( dir == XDN ) return xdn[x];
-  return(x);
-}
-
-/* Opposite of a direction */
-static inline int opp_dir(int dir){
-  return ( dir + ND ) % NDIRS;
-}
 
 /* Turn a link on */
 static inline void link_on(int t, int x, int dir){
