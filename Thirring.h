@@ -45,8 +45,8 @@
 /* Propability of exiting in the monomer moving worm update */
 #define flip_exit_propability 0.2
 
-//#define FLUCTUATION_MATRIX
-#define WITH_MASS_MONOMERS
+#define FLUCTUATION_MATRIX
+//#define WITH_MASS_MONOMERS
 //#define PROPAGATOR_MATRIX
 
 #define MAX_SECTOR 301

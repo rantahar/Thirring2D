@@ -831,18 +831,6 @@ int main(int argc, char* argv[])
 
       if(i>n_thermalize) {
         /* Do measurements */
-        double tdet = determinant_mu(0), tdet2;
-        printf("Determinant at mu=0 %g \n", tdet);
-        printf("Determinant ratio %g \n", accepted_det/tdet);
-        int sector = 0;
-        for(double tmu=0;tmu<=mu;tmu+=SECTOR_STEP){
-          tdet2 = determinant_mu(tmu);
-          if( tdet*tdet2 < 0 ){
-            sector++;
-          }
-          tdet = tdet2;
-        }
-        printf("Sector %d\n",sector);
 
         measure();
 
