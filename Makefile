@@ -24,6 +24,9 @@ worldline: worldline.o mersenne_inline.o measurements.o $(DEPS)
 gauged: gauged.o mersenne_inline.o $(DEPS)
 	$(CC) $(CFLAGS) -o gauged gauged.o mersenne_inline.o -llapack $(LIB)
 
+hmc: hmc.o mersenne_inline.o $(DEPS)
+	$(CC) $(CFLAGS) -o hmc hmc.o mersenne_inline.o -llapack $(LIB)
+
 dimer: dimer.o mersenne_inline.o $(DEPS)
 	$(CC) $(CFLAGS) -o dimer dimer.o mersenne_inline.o -llapack $(LIB)
 
