@@ -70,7 +70,7 @@ static inline int opp_dir(int dir){
 
 
 /// Calculate the gauge action
-double calc_gauge_action(){
+double calc_gauge_action(double ***A){
   double S = 0;
   for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) for( int dir=0; dir<ND; dir++ ) {
     S+= 1.-cos(A[t][x][dir]);
@@ -79,7 +79,7 @@ double calc_gauge_action(){
 }
 
 /// Update using gauge heatbath ignoring the fermion determinant
-void update_puregauge_hb(){
+void update_puregauge_hb(double ***A){
   for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) for( int dir=0; dir<ND; dir++ ) {
     double s1 = -Nf/g*cos(A[t][x][dir]);
     double new = 2*M_PI*mersenne()-M_PI;
@@ -95,6 +95,13 @@ void update_puregauge_hb(){
 }
 
 
+/// Update the gauge field according to a momentum field
+double gauge_step(double ***A, double ***mom, double eps){
+  for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) for( int dir=0; dir<ND; dir++ ) {
+    A[t][x][dir] += 2.0*eps*mom[t][x][dir];
+  }
+}
+
 
 ///Allocate a pseudofermion vector
 _Complex double ** alloc_vector(){
@@ -109,7 +116,7 @@ _Complex double ** alloc_vector(){
 ///Free a pseudofermion vector
 void free_vector(_Complex double ** v){
   for (int t=0; t<NT; t++){
-    free(A[t]);
+    free(v[t]);
   }
   free(v);
 }
@@ -376,7 +383,7 @@ void fmdm_invert_cg(_Complex double ** v_in, _Complex double ** v_out, double **
   for( k = 1; k < CG_MAX_ITER; k++ )
   {
     fm_mul(p, Mp, A);
-    fm_conjugate_mul(p, MMp, A);
+    fm_conjugate_mul(Mp, MMp, A);
     pMp = 0;
     for( int t=0;t<NT;t++) for( int x=0;x<NX;x++)
       pMp += creal(p[t][x])*creal(MMp[t][x]) + cimag(p[t][x])*cimag(MMp[t][x]);
@@ -394,7 +401,7 @@ void fmdm_invert_cg(_Complex double ** v_in, _Complex double ** v_out, double **
       break;
     if( rr/rr_init > 1e10 ) {
       /* There is an (somewhat) exact zero mode, bail */
-      printf("Cannot invert fermion matrix");
+      printf("Cannot invert fermion matrix\n");
       exit(1);
       break;
     }
@@ -415,8 +422,8 @@ void fmdm_invert_cg(_Complex double ** v_in, _Complex double ** v_out, double **
 /// Invert the fermion matrix on a vector using CG
 void fm_invert_cg(_Complex double ** v_in, _Complex double ** v_out, double *** A){
   _Complex double **tmp = alloc_vector();
-  fm_conjugate_mul( tmp, v_in, A );
-  fmdm_invert_cg( v_out, tmp, A);
+  fm_conjugate_mul( v_in, tmp, A );
+  fmdm_invert_cg( tmp, v_out, A);
   free_vector(tmp);
 }
 
@@ -443,12 +450,28 @@ double random_pseudofermion(_Complex double **v, double ***A)
 }
 
 
+double pseudofermion_action(_Complex double **v, double ***A){
+  _Complex double **tmp = alloc_vector();
+  double action = 0;
+  fm_invert_cg(v, tmp, A);
+
+  for( int t=0;t<NT;t++) for( int x=0;x<NX;x++){
+    action += creal(tmp[t][x])*creal(tmp[t][x])
+            + cimag(tmp[t][x])*cimag(tmp[t][x]);
+  }
+  
+  free_vector(tmp);
+  return action;
+}
+
+
+
 /// Generate a random momentum field
 double random_momentum(double ***mom)
 {
   double action=0;
   for (int t=0; t<NT; t++){
-    for (int x=0; x<NX+1; x++) {
+    for (int x=0; x<NX; x++) {
       double x1, x2;
       x1 = mersenne(), x2=mersenne();
       mom[t][x][0] = sqrt( -2*log(x1) )*cos(2*M_PI*x2);
@@ -463,19 +486,38 @@ double random_momentum(double ***mom)
 }
 
 
+
+/// Calculate the gauge action
+double momentum_step(double ***mom, double ***A, _Complex double **psi, double eps){
+
+  // Calculate the force of the gauge action and update to mom
+  for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) for( int dir=0; dir<ND; dir++ ) {
+    //dS/dA = -Nf/g*sin(A)
+    mom[t][x][dir] -= eps*Nf/g*sin(A[t][x][dir]);
+  }
+}
+
+
+
 /// Update the gauge using HMC
 void update_gauge(double ***A){
 
   static int init = 1;
   static _Complex double **psi = NULL;
+  static _Complex double **chi = NULL;
   static double ***mom = NULL;
+  static double ***new_A = NULL;
   if(init){
     psi = alloc_vector();
+    chi = alloc_vector();
     mom = malloc( NT*sizeof(double **) );
+    new_A = malloc( NT*sizeof(double **) );
     for (int t=0; t<NT; t++){
       mom[t] = malloc( NX*sizeof(double *) );
-      for (int x=0; x<NX+1; x++) {
+      new_A[t] = malloc( NX*sizeof(double *) );
+      for (int x=0; x<NX; x++) {
         mom[t][x] = malloc( ND*sizeof(double) );
+        new_A[t][x] = malloc( ND*sizeof(double) );
       }
     }
 
@@ -488,13 +530,66 @@ void update_gauge(double ***A){
   double momentum_action = random_momentum(mom);
   printf("Start HMC: Momentum action %g\n", momentum_action);
 
-  double gauge_action = calc_gauge_action();
+  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int d=0; d<ND; d++)  {
+    new_A[t][x][d] = A[t][x][d];
+  }
+  double gauge_action = calc_gauge_action(new_A);  
   printf("Start HMC: gauge action %g\n", gauge_action);
 
+  fermion_action = pseudofermion_action(psi, new_A);
+  printf("Start HMC: Fermion action %g\n", fermion_action);
 
-  int nsteps = 10;
+
+  int nsteps = 100;
   for(int i=0; i<nsteps;i++){
     
+    gauge_step(new_A,mom,0.5/nsteps);
+
+    momentum_step(mom, new_A, psi, 1.0/nsteps);
+
+    gauge_step(new_A,mom,0.5/nsteps);
+
+
+    double momentum_action2 = 0;
+    for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int d=0; d<ND; d++) {
+        momentum_action2 += mom[t][x][d]*mom[t][x][d];
+    }
+    double gauge_action2 = calc_gauge_action(new_A);
+
+    double fermion_action2 = pseudofermion_action(psi, new_A);
+
+
+    double dS = momentum_action2 - momentum_action 
+            //+ fermion_action2  - fermion_action
+              + gauge_action2    - gauge_action;
+
+    printf("HMC Step, dS %g, Sg %g, Sf %g, Sm %g\n", dS, gauge_action2, fermion_action2,  momentum_action2);
+
+  }
+
+
+  double fermion_action2 = pseudofermion_action(psi, new_A);
+
+  double momentum_action2 = 0;
+  for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int d=0; d<ND; d++) {
+      momentum_action2 += mom[t][x][d]*mom[t][x][d];
+  }
+  double gauge_action2 = calc_gauge_action(new_A);
+
+  double dS = momentum_action2 - momentum_action 
+            //+ fermion_action2  - fermion_action
+            + gauge_action2    - gauge_action;
+
+
+  printf("HMC End, dS %g, Sg %g, Sf %g, Sm %g\n", dS, gauge_action2, fermion_action2, momentum_action2);
+
+
+  if (exp(-dS) > mersenne() ){
+    printf("ACCEPTED\n");
+    for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int d=0; d<ND; d++)
+      A[t][x][d] = new_A[t][x][d];
+  } else {
+    printf("REJECTED\n");
   }
 
 }
@@ -591,6 +686,7 @@ int main(void){
     for (int x=0; x<NX+1; x++) {
       eta[t][x] = malloc( ND*sizeof(int) );
       A[t][x] = malloc( ND*sizeof(double) );
+      A[t][x][0] = A[t][x][1] = 0;
     }
   }
   xup = malloc( (NX+1)*sizeof(int) );
