@@ -126,15 +126,15 @@ void fermion_matrix( _Complex double * M ){
     
     int x2 = xup[x];
     index = (NX*t + x) + (NX*t+x2)*VOLUME;
-    sA = sin(A[t][x][0]);
-    cA = cos(A[t][x][0]);
+    sA = sin(A[t][x][1]);
+    cA = cos(A[t][x][1]);
     if( x2 > x ) M[index] = 0.5 * (cA + sA*I) * eta[t][x][1] ;
     else M[index] = -0.5 * (cA + sA*I) * eta[t][x][1] ;
     
     x2 = xdn[x];
     index = (NX*t + x) + (NX*t+x2)*VOLUME;
-    sA = sin(A[t][x2][0]);
-    cA = cos(A[t][x2][0]);
+    sA = sin(A[t][x2][1]);
+    cA = cos(A[t][x2][1]);
     if( x2 > x ) M[index] = 0.5 * (cA - sA*I) * eta[t][x2][1] ;
     else M[index] = -0.5 * (cA - sA*I) * eta[t][x2][1] ;
   }
