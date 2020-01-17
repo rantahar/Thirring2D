@@ -85,11 +85,9 @@ void update_puregauge_hb(double ***A){
     double new = 2*M_PI*mersenne()-M_PI;
     double s2 = -Nf/g*cos(new);
     double edS = exp(-s2+s1);
-    //printf("New A=%f at (%d,%d), direction %d, exp(-deltaS)=%g\n", A[t][x][dir],t,x,dir, edS);
 
     if( mersenne() < edS ) {
       A[t][x][dir] = new;
-      //printf("Accepted\n");
     }
   }
 }
@@ -437,20 +435,6 @@ double pseudofermion_action(_Complex double **v, double ***A){
     action += creal(v[t][x])*creal(tmp[t][x])
             + cimag(v[t][x])*cimag(tmp[t][x]);
   }
-
-  //_Complex double **tmp2 = alloc_vector();
-  //double diff=0;
-  //fm_mul(v, tmp, A);
-  //fm_conjugate_mul(tmp, tmp2, A);
-  //
-  //for (int t=0; t<NT; t++) for( int x=0; x<NX; x++){ 
-  //  diff +=( creal(tmp[t][x])*creal(tmp[t][x])
-  //         + cimag(tmp[t][x])*cimag(tmp[t][x]))
-  //        -( creal(v[t][x])*creal(tmp2[t][x])
-  //         + cimag(v[t][x])*cimag(tmp2[t][x]));
-  //}
-  //printf("CONJUGATE test %g\n",diff);
-  //free_vector(tmp2);
   
   free_vector(tmp);
   return action;
