@@ -11,8 +11,8 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 8
-#define NX 8
+#define NT 32
+#define NX 32
 
 #define ND 2
 #define NDIRS (2*ND)
@@ -828,11 +828,8 @@ void measure(){
 
   test_conjugate(A);
 
-  double complex this_det = determinant();
-  det += this_det;
-  double this_sign = (creal(this_det) > 0) ? 1 : -1;  
   for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) for( int dir=0; dir<ND; dir++) {
-    M += this_sign*A[t][x][dir];
+    M += A[t][x][dir];
   }
 
   phase = fermion_phase(A);
@@ -840,7 +837,6 @@ void measure(){
   n++;
   
   printf("Magnetisation %g\n",M/VOLUME);
-  printf("Determinant Re %g Im %g\n",creal(det),cimag(det));
   printf("Phase %g\n",phase);
   phase = 0; det = 0; M = 0;
 }
