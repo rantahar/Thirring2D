@@ -790,35 +790,59 @@ void test_conjugate(double ***A){
 
 
 
+/// Calculate the phase of the fermion action
+double fermion_phase(double ***A){
+  _Complex double **c = alloc_vector();
+  _Complex double **mdc = alloc_vector();
+
+  int sources = 20;
+  double imaginary_part = 0;
+
+  for( int i=0;i<sources;i++) {
+    stochastic_vector(c);
+    fm_conjugate_mul(c, mdc, A);
+
+    for( int t=0;t<NT;t++) for( int x=0;x<NX;x++){
+      imaginary_part += creal(c[t][x]) * cimag(mdc[t][x])
+                      - cimag(c[t][x]) * creal(mdc[t][x]);
+    }
+  }
+
+  free_vector(c);
+  free_vector(mdc);
+
+  return imaginary_part/sources;
+}
+
 
 
 /// Run measurements
 /// * Magnetisation: average gauge field
 /// * Determinant: the fermion determinant
-/// * Sign: The sign of the determinant
+/// * Phase: The imaginary part of the action 
 void measure(){
   static int n=0;
   static double M = 0;
   static double complex det = 0;
-  static double sign = 0;
+  static double phase = 0;
 
   test_conjugate(A);
 
   double complex this_det = determinant();
   det += this_det;
-  double this_sign = (creal(this_det) > 0) ? 1 : -1;
-  sign += this_sign;
-  
+  double this_sign = (creal(this_det) > 0) ? 1 : -1;  
   for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) for( int dir=0; dir<ND; dir++) {
     M += this_sign*A[t][x][dir];
   }
+
+  phase = fermion_phase(A);
   
   n++;
   
   printf("Magnetisation %g\n",M/VOLUME);
   printf("Determinant Re %g Im %g\n",creal(det),cimag(det));
-  printf("Sign %g\n",sign);
-  sign = 0; det = 0; M = 0;
+  printf("Phase %g\n",phase);
+  phase = 0; det = 0; M = 0;
 }
 
 
