@@ -316,14 +316,6 @@ double complex determinant(){
     ipiv = malloc( n*sizeof(int) ); 
     double complex det = 1;
     
-    /*for( int i=0;i<VOLUME;i++) { for( int j=0;j<VOLUME;j++){
-        printf(" %4.2f ", creal( M[i+j*VOLUME] ) );
-      }
-      printf("\n");
-    }
-    printf("\n");
-    */
-    
     LAPACK_zgetrf( &n, &n, M, &n, ipiv, &info );
     
     if( info > 0 ) printf("error %d\n", info);
@@ -332,23 +324,7 @@ double complex determinant(){
       det *= M[i*n+i];
       if( ipiv[i] != i+1 ) det*=-1; 
     }
-    
-    /*
-    int lwork=n*n;
-    _Complex double *work;
-    work = malloc( lwork*sizeof(_Complex double) );
 
-    LAPACK_zgetri(&n, M, &n, ipiv, work, &lwork, &info);
-        free(work);
-
-    for( int i=0;i<VOLUME;i++) { for( int j=0;j<VOLUME;j++){
-        printf(" %4.2f ", creal( M[i+j*VOLUME] ) );
-      }
-      printf("\n");
-    }
-    printf("\n");
-    */
-    
     free(M);
     free(ipiv);
     return( det );
@@ -581,8 +557,8 @@ double momentum_step(double ***mom, double ***A, _Complex double **psi, double e
     mom[t][x][1] -= eps*force;
     
     
-    #ifdef CHECK_FORCE
     // Test force calculation
+    #ifdef CHECK_FORCE
     f0 = pseudofermion_action(psi, A);
     A[t][x][1] += 0.000001;
     f1 = pseudofermion_action(psi, A);
@@ -613,6 +589,7 @@ double momentum_step(double ***mom, double ***A, _Complex double **psi, double e
   free_vector(Mchi);
   free_vector(Mdchi);
 }
+
 
 
 
