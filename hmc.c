@@ -191,8 +191,8 @@ void fm_conjugate_mul(_Complex double ** v_in, _Complex double ** v_out, double 
   static double expmu, expmmu;
   static int init=1;
   if(init){
-    expmu = exp(mu);
-    expmmu = exp(-mu);
+    expmu = exp(-mu);
+    expmmu = exp(mu);
     init = 0;
   }
 
@@ -650,7 +650,8 @@ void update_gauge(double ***A){
     new_A[t][x][d] = A[t][x][d];
   }
 
-  int nsteps = 100;
+
+  int nsteps = 20;
   double traj_length=1;
   for(int i=0; i<nsteps;i++){
     
