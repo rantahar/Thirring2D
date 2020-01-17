@@ -11,8 +11,8 @@
 #endif
 
 /* Lattice size and dimensions */
-#define NT 48
-#define NX 6
+#define NT 8
+#define NX 8
 
 #define ND 2
 #define NDIRS (2*ND)
@@ -189,8 +189,8 @@ void fm_conjugate_mul(_Complex double ** v_in, _Complex double ** v_out, double 
   static double expmu, expmmu;
   static int init=1;
   if(init){
-    expmu = exp(-mu);
-    expmmu = exp(mu);
+    expmu = exp(mu);
+    expmmu = exp(-mu);
     init = 0;
   }
 
@@ -206,10 +206,10 @@ void fm_conjugate_mul(_Complex double ** v_in, _Complex double ** v_out, double 
     double cA = cos(A[t][x][0]);
     int t2 = tup[t];
     if( t2 > t ){
-      v -= 0.5 * (cA + sA*I) * eta[t][x][0] * expmu * v_in[t2][x];
+      v += 0.5 * (cA + sA*I) * eta[t][x][0] * expmu * v_in[t2][x];
     } else {
       // Antiperiodic boundary condition
-      v += 0.5 * (cA + sA*I) * eta[t][x][0] * expmu * v_in[t2][x];
+      v -= 0.5 * (cA + sA*I) * eta[t][x][0] * expmu * v_in[t2][x];
     }
 
     // Negative time direction
@@ -218,9 +218,9 @@ void fm_conjugate_mul(_Complex double ** v_in, _Complex double ** v_out, double 
     cA = cos(A[t2][x][0]);
     if( t2 > t ){
       // Antiperiodic boundary condition
-      v -= 0.5 * (cA - sA*I) * eta[t2][x][0] * expmmu * v_in[t2][x];
-    } else {
       v += 0.5 * (cA - sA*I) * eta[t2][x][0] * expmmu * v_in[t2][x];
+    } else {
+      v -= 0.5 * (cA - sA*I) * eta[t2][x][0] * expmmu * v_in[t2][x];
     }
 
     // Positive x direction
@@ -228,10 +228,10 @@ void fm_conjugate_mul(_Complex double ** v_in, _Complex double ** v_out, double 
     sA = sin(A[t][x][1]);
     cA = cos(A[t][x][1]);
     if( x2 > x ){
-      v -= 0.5 * (cA + sA*I) * eta[t][x][1] * v_in[t][x2];
+      v += 0.5 * (cA + sA*I) * eta[t][x][1] * v_in[t][x2];
     } else {
       // Antiperiodic boundary condition
-      v += 0.5 * (cA + sA*I) * eta[t][x][1] * v_in[t][x2];
+      v -= 0.5 * (cA + sA*I) * eta[t][x][1] * v_in[t][x2];
     }
 
     x2 = xdn[x];
@@ -239,14 +239,21 @@ void fm_conjugate_mul(_Complex double ** v_in, _Complex double ** v_out, double 
     cA = cos(A[t][x2][1]);
     if( x2 > x ){
       // Antiperiodic boundary condition
-      v -= 0.5 * (cA - sA*I) * eta[t][x2][1] * v_in[t][x2];
-    } else {
       v += 0.5 * (cA - sA*I) * eta[t][x2][1] * v_in[t][x2];
+    } else {
+      v -= 0.5 * (cA - sA*I) * eta[t][x2][1] * v_in[t][x2];
     }
 
     v_out[t][x] = v;
   }
 }
+
+
+
+
+
+
+
 
 /// Multiply vector by the fermion matrix squared 
 void fmdm_mul(_Complex double ** v_in, _Complex double ** v_out, double *** A){
@@ -386,6 +393,10 @@ void fmdm_invert_cg(_Complex double ** v_in, _Complex double ** v_out, double **
 
     rr_old = rr;
   }
+
+
+
+
   free_vector(r);
   free_vector(p);
   free_vector(Mp);
@@ -488,7 +499,7 @@ double random_momentum(double ***mom)
 }
 
 
-
+//#define CHECK_FORCE
 /// Calculate the gauge action
 double momentum_step(double ***mom, double ***A, _Complex double **psi, _Complex double **st, double eps){
 
@@ -513,7 +524,7 @@ double momentum_step(double ***mom, double ***A, _Complex double **psi, _Complex
     else force = dm;
 
     cmc = conj(chi[t][x])*Mchi[t2][x];
-    dm = - 2 * 0.5 * eta[t][x][0] * exp(-mu)
+    dm =  -2 * 0.5 * eta[t][x][0] * exp(-mu)
       * ( - creal(cmc) * sin(A[t][x][0]) - cimag(cmc) * cos(A[t][x][0]) );
     if( t2 > t ) force -= dm;
     else force += dm;
@@ -694,7 +705,7 @@ void update_gauge(double ***A){
   }
 
 
-  int nsteps = 500;
+  int nsteps = 10;
   double traj_length=1;
   for(int i=0; i<nsteps;i++){
     
@@ -744,6 +755,40 @@ void update_gauge(double ***A){
 
 
 
+/// Test that fm_conjugate_mul applies the conjugate of fm_mul
+void test_conjugate(double ***A){
+  _Complex double **c = alloc_vector();
+  _Complex double **mc = alloc_vector();
+  _Complex double **mdc = alloc_vector();
+
+  stochastic_vector(c);
+
+  fm_mul(c, mc, A);
+  fm_conjugate_mul(c, mdc, A);
+
+  _Complex double cmdc = 0;
+  _Complex double cmc  = 0;
+
+  for( int t=0;t<NT;t++) for( int x=0;x<NX;x++){
+    cmdc += conj(c[t][x])*mdc[t][x];
+    cmc  += conj(mc[t][x])*c[t][x];
+  }
+
+  _Complex double cdiff = cmdc - conj(cmc);
+
+  double diff = creal(cdiff)*creal(cdiff) + cimag(cdiff)*cimag(cdiff);
+  if(diff > 0.001){
+    printf("ERROR fm_conjugate_mul is not the conjugate of fm_mul\n");
+    printf("Difference = %g\n", diff);
+    exit(1);
+  }
+
+  free_vector(c);
+  free_vector(mc);
+  free_vector(mdc);
+}
+
+
 
 
 
@@ -756,6 +801,8 @@ void measure(){
   static double M = 0;
   static double complex det = 0;
   static double sign = 0;
+
+  test_conjugate(A);
 
   double complex this_det = determinant();
   det += this_det;
@@ -855,6 +902,10 @@ int main(void){
 #ifdef OPENX
     eta[t][NX][0] = eta[t][NX][1] = 0;
 #endif
+  }
+
+  for (int i=0; i<100; i++) {
+    update_puregauge_hb(A);
   }
 
   // Run updates and measurements
