@@ -32,7 +32,7 @@
 #define OPENX       //open in space, (anti)symmetric in time
 
 #define CG_ACCURACY 1e-30
-#define CG_MAX_ITER 10000
+#define CG_MAX_ITER 100000
 
 /* Simulation parameters */
 double m;
@@ -208,10 +208,10 @@ void fm_conjugate_mul(_Complex double ** v_in, _Complex double ** v_out, double 
     double cA = cos(A[t][x][0]);
     int t2 = tup[t];
     if( t2 > t ){
-      v -= 0.5 * (cA - sA*I) * eta[t][x][0] * expmu * v_in[t2][x];
+      v -= 0.5 * (cA + sA*I) * eta[t][x][0] * expmu * v_in[t2][x];
     } else {
       // Antiperiodic boundary condition
-      v += 0.5 * (cA - sA*I) * eta[t][x][0] * expmu * v_in[t2][x];
+      v += 0.5 * (cA + sA*I) * eta[t][x][0] * expmu * v_in[t2][x];
     }
 
     // Negative time direction
@@ -220,9 +220,9 @@ void fm_conjugate_mul(_Complex double ** v_in, _Complex double ** v_out, double 
     cA = cos(A[t2][x][0]);
     if( t2 > t ){
       // Antiperiodic boundary condition
-      v -= 0.5 * (cA + sA*I) * eta[t2][x][0] * expmmu * v_in[t2][x];
+      v -= 0.5 * (cA - sA*I) * eta[t2][x][0] * expmmu * v_in[t2][x];
     } else {
-      v += 0.5 * (cA + sA*I) * eta[t2][x][0] * expmmu * v_in[t2][x];
+      v += 0.5 * (cA - sA*I) * eta[t2][x][0] * expmmu * v_in[t2][x];
     }
 
     // Positive x direction
@@ -230,10 +230,10 @@ void fm_conjugate_mul(_Complex double ** v_in, _Complex double ** v_out, double 
     sA = sin(A[t][x][1]);
     cA = cos(A[t][x][1]);
     if( x2 > x ){
-      v -= 0.5 * (cA - sA*I) * eta[t][x][1] * v_in[t][x2];
+      v -= 0.5 * (cA + sA*I) * eta[t][x][1] * v_in[t][x2];
     } else {
       // Antiperiodic boundary condition
-      v += 0.5 * (cA - sA*I) * eta[t][x][1] * v_in[t][x2];
+      v += 0.5 * (cA + sA*I) * eta[t][x][1] * v_in[t][x2];
     }
 
     x2 = xdn[x];
@@ -241,9 +241,9 @@ void fm_conjugate_mul(_Complex double ** v_in, _Complex double ** v_out, double 
     cA = cos(A[t][x2][1]);
     if( x2 > x ){
       // Antiperiodic boundary condition
-      v -= 0.5 * (cA + sA*I) * eta[t][x2][1] * v_in[t][x2];
+      v -= 0.5 * (cA - sA*I) * eta[t][x2][1] * v_in[t][x2];
     } else {
-      v += 0.5 * (cA + sA*I) * eta[t][x2][1] * v_in[t][x2];
+      v += 0.5 * (cA - sA*I) * eta[t][x2][1] * v_in[t][x2];
     }
 
     v_out[t][x] = v;
@@ -424,6 +424,7 @@ void fm_invert_cg(_Complex double ** v_in, _Complex double ** v_out, double *** 
   _Complex double **tmp = alloc_vector();
   fm_conjugate_mul( v_in, tmp, A );
   fmdm_invert_cg( tmp, v_out, A);
+
   free_vector(tmp);
 }
 
@@ -450,15 +451,30 @@ double random_pseudofermion(_Complex double **v, double ***A)
 }
 
 
+/// Calculate the fermion part of the action
 double pseudofermion_action(_Complex double **v, double ***A){
   _Complex double **tmp = alloc_vector();
   double action = 0;
-  fm_invert_cg(v, tmp, A);
+  fmdm_invert_cg(v, tmp, A);
 
   for( int t=0;t<NT;t++) for( int x=0;x<NX;x++){
-    action += creal(tmp[t][x])*creal(tmp[t][x])
-            + cimag(tmp[t][x])*cimag(tmp[t][x]);
+    action += creal(v[t][x])*creal(tmp[t][x])
+            + cimag(v[t][x])*cimag(tmp[t][x]);
   }
+
+  //_Complex double **tmp2 = alloc_vector();
+  //double diff=0;
+  //fm_mul(v, tmp, A);
+  //fm_conjugate_mul(tmp, tmp2, A);
+  //
+  //for (int t=0; t<NT; t++) for( int x=0; x<NX; x++){ 
+  //  diff +=( creal(tmp[t][x])*creal(tmp[t][x])
+  //         + cimag(tmp[t][x])*cimag(tmp[t][x]))
+  //        -( creal(v[t][x])*creal(tmp2[t][x])
+  //         + cimag(v[t][x])*cimag(tmp2[t][x]));
+  //}
+  //printf("CONJUGATE test %g\n",diff);
+  //free_vector(tmp2);
   
   free_vector(tmp);
   return action;
@@ -495,6 +511,107 @@ double momentum_step(double ***mom, double ***A, _Complex double **psi, double e
     //dS/dA = -Nf/g*sin(A)
     mom[t][x][dir] -= eps*Nf/g*sin(A[t][x][dir]);
   }
+
+  // Next the pseudofermion force
+  _Complex double **chi = alloc_vector();
+  _Complex double **Mchi = alloc_vector();
+  _Complex double **Mdchi = alloc_vector();
+  fmdm_invert_cg(psi, chi, A);
+  fm_mul(chi, Mchi, A);
+  fm_conjugate_mul(chi, Mdchi, A);
+  for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) {
+    double force, dm;
+    int t2 = tup[t];
+    _Complex double cmc = conj(Mchi[t][x])*chi[t2][x];
+    dm = 2 * 0.5 * eta[t][x][0] * exp(mu)
+      * ( - creal(cmc) * sin(A[t][x][0]) - cimag(cmc) * cos(A[t][x][0]) );
+    if( t2 > t ) force = -dm;
+    else force = dm;
+
+    cmc = conj(chi[t][x])*Mchi[t2][x];
+    dm = - 2 * 0.5 * eta[t][x][0] * exp(-mu)
+      * ( - creal(cmc) * sin(A[t][x][0]) - cimag(cmc) * cos(A[t][x][0]) );
+    if( t2 > t ) force -= dm;
+    else force += dm;
+    mom[t][x][0] -= eps*force;
+    
+    
+    // Test force calculation
+    #ifdef CHECK_FORCE
+    double f0 = pseudofermion_action(psi, A);
+    A[t][x][0] += 0.00001;
+    double f1 = pseudofermion_action(psi, A);
+    A[t][x][0] -= 0.00001;
+    double diff =  force - (f1-f0)/0.00001;
+    if( diff*diff > 0.0001 ){
+      printf("T-force at %d %d incorrect!\n",t,x);
+      printf("T calculated force is %g\n", force);
+      printf("T real derivative is %g\n", (f1-f0)/0.00001);
+      printf("diff = %g\n", diff);
+      printf("%g %g %g\n", A[t][x][0], sin(A[t][x][0]), cos(A[t][x][0]));
+      cmc = conj(Mchi[t][x])*chi[t2][x];
+      printf("%g %g \n", 
+        2 * 0.5 * eta[t][x][0] * exp(mu) *(  creal(cmc) * sin(A[t][x][0]) ),
+        2 * 0.5 * eta[t][x][0] * exp(mu) *(- cimag(cmc) * cos(A[t][x][0]) )
+      );
+      cmc = conj(chi[t][x])*Mchi[t2][x];
+      printf("%g %g \n", 
+      - 2 * 0.5 * eta[t][x][0] * exp(-mu)*(  creal(cmc) * sin(A[t][x][0]) ),
+      - 2 * 0.5 * eta[t][x][0] * exp(-mu)*(- cimag(cmc) * cos(A[t][x][0]) )
+      );
+      printf("\n");
+    }
+    #endif
+    
+
+
+    force = 0;
+    int x2 = xup[x];
+    cmc = conj(Mchi[t][x])*chi[t][x2];
+    dm = 2 * 0.5 * eta[t][x][1]
+      * ( - creal(cmc) * sin(A[t][x][1]) - cimag(cmc) * cos(A[t][x][1]));
+    if( x2 > x ) force = -dm;
+    else force = dm;
+
+    cmc = conj(chi[t][x])*Mchi[t][x2];
+    dm = - 2 * 0.5 * eta[t][x][1]
+      * ( - creal(cmc) * sin(A[t][x][1]) - cimag(cmc) * cos(A[t][x][1]));
+    if( x2 > x ) force -= dm;
+    else force += dm;
+    mom[t][x][1] -= eps*force;
+    
+    
+    #ifdef CHECK_FORCE
+    // Test force calculation
+    f0 = pseudofermion_action(psi, A);
+    A[t][x][1] += 0.000001;
+    f1 = pseudofermion_action(psi, A);
+    A[t][x][1] -= 0.000001;
+    diff =  force - (f1-f0)/0.000001;
+    if( diff*diff > 0.0001 ){
+      printf("X-force at %d %d incorrect!\n",t,x);
+      printf("X calculated force is %g\n", force);
+      printf("X real derivative is %g\n", (f1-f0)/0.000001);
+      printf("diff = %g\n", diff);
+      printf("%g %g %g\n", A[t][x][1], sin(A[t][x][1]), cos(A[t][x][1]));
+      cmc = conj(Mchi[t][x])*chi[t][x2];
+      printf("%g %g \n",
+        2 * 0.5 * eta[t][x][1] * exp(mu) *(  creal(cmc) * sin(A[t][x][1])  ),
+        2 * 0.5 * eta[t][x][1] * exp(mu) *(- cimag(cmc) * cos(A[t][x][1])  )
+      );
+      cmc = conj(chi[t][x])*Mchi[t][x2];
+      printf("%g %g \n", 
+      - 2 * 0.5 * eta[t][x][1] * exp(-mu)*(- creal(cmc) * sin(A[t][x][1])  ),
+      - 2 * 0.5 * eta[t][x][1] * exp(-mu)*(- cimag(cmc) * cos(A[t][x][1])  )
+      );
+      printf("\n");
+    }
+    #endif
+   
+  }
+  free_vector(chi);
+  free_vector(Mchi);
+  free_vector(Mdchi);
 }
 
 
@@ -525,45 +642,21 @@ void update_gauge(double ***A){
   }
 
   double fermion_action = random_pseudofermion(psi, A);
-  printf("Start HMC: Fermion action %g\n", fermion_action);
-
   double momentum_action = random_momentum(mom);
-  printf("Start HMC: Momentum action %g\n", momentum_action);
+  double gauge_action = calc_gauge_action(A);  
+  printf("Start HMC: Sg %g, Sf %g, Sm %g\n", gauge_action, fermion_action, momentum_action);
 
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int d=0; d<ND; d++)  {
     new_A[t][x][d] = A[t][x][d];
   }
-  double gauge_action = calc_gauge_action(new_A);  
-  printf("Start HMC: gauge action %g\n", gauge_action);
-
-  fermion_action = pseudofermion_action(psi, new_A);
-  printf("Start HMC: Fermion action %g\n", fermion_action);
-
 
   int nsteps = 100;
+  double traj_length=1;
   for(int i=0; i<nsteps;i++){
     
-    gauge_step(new_A,mom,0.5/nsteps);
-
-    momentum_step(mom, new_A, psi, 1.0/nsteps);
-
-    gauge_step(new_A,mom,0.5/nsteps);
-
-
-    double momentum_action2 = 0;
-    for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int d=0; d<ND; d++) {
-        momentum_action2 += mom[t][x][d]*mom[t][x][d];
-    }
-    double gauge_action2 = calc_gauge_action(new_A);
-
-    double fermion_action2 = pseudofermion_action(psi, new_A);
-
-
-    double dS = momentum_action2 - momentum_action 
-            //+ fermion_action2  - fermion_action
-              + gauge_action2    - gauge_action;
-
-    printf("HMC Step, dS %g, Sg %g, Sf %g, Sm %g\n", dS, gauge_action2, fermion_action2,  momentum_action2);
+    gauge_step(new_A,mom,traj_length*0.5/nsteps);
+    momentum_step(mom, new_A, psi, traj_length/nsteps);
+    gauge_step(new_A,mom,traj_length*0.5/nsteps);
 
   }
 
@@ -577,7 +670,7 @@ void update_gauge(double ***A){
   double gauge_action2 = calc_gauge_action(new_A);
 
   double dS = momentum_action2 - momentum_action 
-            //+ fermion_action2  - fermion_action
+            + fermion_action2  - fermion_action
             + gauge_action2    - gauge_action;
 
 
@@ -585,11 +678,11 @@ void update_gauge(double ***A){
 
 
   if (exp(-dS) > mersenne() ){
-    printf("ACCEPTED\n");
+    printf("HMC ACCEPTED\n");
     for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int d=0; d<ND; d++)
       A[t][x][d] = new_A[t][x][d];
   } else {
-    printf("REJECTED\n");
+    printf("HMC REJECTED\n");
   }
 
 }
@@ -643,8 +736,8 @@ int main(void){
   feenableexcept(FE_INVALID | FE_OVERFLOW);
   #endif 
 
-  long seed;
-  int n_loops, n_measure;
+  long seed=0;
+  int n_loops=1, n_measure=1;
     
   /* Read in the input */
   printf(" Number of updates : ");
