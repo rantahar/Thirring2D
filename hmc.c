@@ -698,7 +698,7 @@ void update_gauge(double ***A){
   stochastic_vector(chi);
   double md_action = stochastic_md_action(chi, A);
 
-  printf("Start HMC: Sg %g, Smdm %g, Smd %g, Sm %g\n", gauge_action, mdm_action, md_action, momentum_action);
+  printf("Start HMC: Sg %g, Smdm %g, Smd %g, Smom %g\n", gauge_action, mdm_action, md_action, momentum_action);
 
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int d=0; d<ND; d++)  {
     new_A[t][x][d] = A[t][x][d];
