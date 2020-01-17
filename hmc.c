@@ -424,6 +424,17 @@ double random_pseudofermion(_Complex double **v, double ***A)
   return action;
 }
 
+/// Generate a vector for stochastic estimation
+void stochastic_vector(_Complex double **v)
+{
+  for (int t=0; t<NT; t++) for( int x=0; x<NX; x++){ 
+    double x1, x2;
+    x1 = mersenne(), x2=mersenne();
+    v[t][x] = (     sqrt( -2*log(x1) )*cos(2*M_PI*x2)
+                + I*sqrt( -2*log(x1) )*sin(2*M_PI*x2) );
+  }
+}
+
 
 /// Calculate the fermion part of the action
 double pseudofermion_action(_Complex double **v, double ***A){
@@ -440,6 +451,21 @@ double pseudofermion_action(_Complex double **v, double ***A){
   return action;
 }
 
+
+/// Action of the stochastic estimate of D^dagger
+double stochastic_md_action(_Complex double **v, double ***A){
+  _Complex double **tmp = alloc_vector();
+  double action = 0;
+
+  fm_conjugate_mul(v, tmp, A);
+  for( int t=0;t<NT;t++) for( int x=0;x<NX;x++){
+    action += creal(v[t][x]) * creal(tmp[t][x])
+            + cimag(v[t][x]) * cimag(tmp[t][x]);
+  }
+
+  free_vector(tmp);
+  return action;
+}
 
 
 /// Generate a random momentum field
@@ -464,7 +490,7 @@ double random_momentum(double ***mom)
 
 
 /// Calculate the gauge action
-double momentum_step(double ***mom, double ***A, _Complex double **psi, double eps){
+double momentum_step(double ***mom, double ***A, _Complex double **psi, _Complex double **st, double eps){
 
   // Calculate the force of the gauge action and update to mom
   for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) for( int dir=0; dir<ND; dir++ ) {
@@ -475,10 +501,8 @@ double momentum_step(double ***mom, double ***A, _Complex double **psi, double e
   // Next the pseudofermion force
   _Complex double **chi = alloc_vector();
   _Complex double **Mchi = alloc_vector();
-  _Complex double **Mdchi = alloc_vector();
   fmdm_invert_cg(psi, chi, A);
   fm_mul(chi, Mchi, A);
-  fm_conjugate_mul(chi, Mdchi, A);
   for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) {
     double force, dm;
     int t2 = tup[t];
@@ -567,11 +591,66 @@ double momentum_step(double ***mom, double ***A, _Complex double **psi, double e
       printf("\n");
     }
     #endif
-   
   }
+  
+  // And the force from the matrix M_conjugate
+  for( int t=0;t<NT;t++) for( int x=0;x<NX;x++) {
+    double force, dm;
+    int t2 = tup[t];
+    _Complex double cmc = conj(st[t][x])*st[t2][x];
+    dm = - 0.5 * eta[t][x][0] * exp(-mu)
+       * ( creal(cmc) * sin(A[t][x][0]) + cimag(cmc) * cos(A[t][x][0]) );
+    if( t2 > t ) force = -dm;
+    else force = dm;
+
+    dm = 0.5 * eta[t][x][0] * exp(mu)
+       * ( creal(cmc) * sin(A[t][x][0]) + cimag(cmc) * cos(A[t][x][0]) );
+    if( t2 > t ) force -= dm;
+    else force += dm;
+    mom[t][x][0] -= eps*force;
+
+    #ifdef CHECK_FORCE
+    double f0 = stochastic_md_action(st, A);
+    A[t][x][0] += 0.00001;
+    double f1 = stochastic_md_action(st, A);
+    A[t][x][0] -= 0.00001;
+    double diff =  force - (f1-f0)/0.00001;
+    if( diff*diff > 0.0001 ){
+      printf("T-force at %d %d incorrect!\n",t,x);
+      printf("T calculated force is %g\n", force);
+      printf("T real derivative is %g\n", (f1-f0)/0.00001);
+      printf("diff = %g\n", diff);
+      printf("%g %g %g\n", A[t][x][0], sin(A[t][x][0]), cos(A[t][x][0]));
+      printf("%g %g \n", 
+        0.5 * eta[t][x][0] * exp(-mu) *(  creal(cmc) * sin(A[t][x][0]) ),
+        0.5 * eta[t][x][0] * exp(-mu) *(- cimag(cmc) * cos(A[t][x][0]) )
+      );
+      printf("%g %g \n", 
+      - 0.5 * eta[t][x][0] * exp(mu)*(  creal(cmc) * sin(A[t][x][0]) ),
+      - 0.5 * eta[t][x][0] * exp(mu)*(- cimag(cmc) * cos(A[t][x][0]) )
+      );
+      printf("\n");
+    }
+    #endif
+
+    force = 0;
+    int x2 = xup[x];
+    cmc = conj(st[t][x])*st[t2][x];
+    dm = - 0.5 * eta[t][x][1] 
+       * ( creal(cmc) * sin(A[t][x][1]) + cimag(cmc) * cos(A[t][x][1]) );
+    if( x2 > x ) force = -dm;
+    else force = dm;
+
+    cmc = conj(st[t][x])*st[t2][x];
+    dm = 0.5 * eta[t][x][1] 
+       * ( creal(cmc) * sin(A[t][x][1]) + cimag(cmc) * cos(A[t][x][1]) );
+    if( x2 > x ) force -= dm;
+    else force += dm;
+    mom[t][x][1] -= eps*force;
+  }
+  
   free_vector(chi);
   free_vector(Mchi);
-  free_vector(Mdchi);
 }
 
 
@@ -602,41 +681,47 @@ void update_gauge(double ***A){
     init = 0;
   }
 
-  double fermion_action = random_pseudofermion(psi, A);
+  double mdm_action = random_pseudofermion(psi, A);
   double momentum_action = random_momentum(mom);
-  double gauge_action = calc_gauge_action(A);  
-  printf("Start HMC: Sg %g, Sf %g, Sm %g\n", gauge_action, fermion_action, momentum_action);
+  double gauge_action = calc_gauge_action(A);
+  stochastic_vector(chi);
+  double md_action = stochastic_md_action(chi, A);
+
+  printf("Start HMC: Sg %g, Smdm %g, Smd %g, Sm %g\n", gauge_action, mdm_action, md_action, momentum_action);
 
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int d=0; d<ND; d++)  {
     new_A[t][x][d] = A[t][x][d];
   }
 
 
-  int nsteps = 20;
+  int nsteps = 500;
   double traj_length=1;
   for(int i=0; i<nsteps;i++){
     
     gauge_step(new_A,mom,traj_length*0.5/nsteps);
-    momentum_step(mom, new_A, psi, traj_length/nsteps);
+    momentum_step(mom, new_A, psi, chi, traj_length/nsteps);
     gauge_step(new_A,mom,traj_length*0.5/nsteps);
 
   }
 
 
-  double fermion_action2 = pseudofermion_action(psi, new_A);
+  double mdm_action2 = pseudofermion_action(psi, new_A);
 
   double momentum_action2 = 0;
   for (int t=0; t<NT; t++) for (int x=0; x<NX; x++) for (int d=0; d<ND; d++) {
       momentum_action2 += mom[t][x][d]*mom[t][x][d];
   }
   double gauge_action2 = calc_gauge_action(new_A);
+  double md_action2 = stochastic_md_action(chi, new_A);
+
 
   double dS = momentum_action2 - momentum_action 
-            + fermion_action2  - fermion_action
+            + mdm_action2      - mdm_action
+            + md_action2       - md_action
             + gauge_action2    - gauge_action;
 
 
-  printf("HMC End, dS %g, Sg %g, Sf %g, Sm %g\n", dS, gauge_action2, fermion_action2, momentum_action2);
+  printf("HMC End, dS %g, Sg %g, Smdm %g, Smd %g, Sm %g\n", dS, gauge_action2, mdm_action2, md_action2, momentum_action2);
 
 
   if (exp(-dS) > mersenne() ){
